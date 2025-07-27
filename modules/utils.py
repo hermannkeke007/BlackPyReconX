@@ -58,11 +58,30 @@ def get_requests_session(force_tor=None):
         }
         session.proxies = proxies
         try:
-            test_ip = session.get("http://httpbin.org/ip", timeout=20).json()['origin']
-            log_message('+', f"Connexion via TOR réussie. IP externe : {test_ip}")
+            response = session.get("https://httpbin.org/ip", timeout=20)
+            response.raise_for_status() # Lève une exception pour les codes d'erreur HTTP
+            test_ip = response.json().get('origin')
+            if test_ip:
+                log_message('+', f"Connexion via TOR réussie. Adresse IP publique de Tor : [bold yellow]{test_ip}[/bold yellow]")
+                # Sauvegarder l'IP dans le statut
+                try:
+                    with open(os.path.join(os.path.dirname(__file__), '..', 'status.json'), 'r+') as f:
+                        status_data = json.load(f)
+                        status_data['tor_ip'] = test_ip
+                        f.seek(0)
+                        json.dump(status_data, f, indent=4)
+                        f.truncate()
+                except (FileNotFoundError, json.JSONDecodeError):
+                    with open(os.path.join(os.path.dirname(__file__), '..', 'status.json'), 'w') as f:
+                        json.dump({'tor_ip': test_ip}, f, indent=4)
+            else:
+                log_message('!', "Impossible de vérifier l'IP publique de Tor, mais le proxy est actif.")
+        except requests.exceptions.RequestException as e:
+            log_message('-', f"La connexion au proxy TOR sur le port 9150 a échoué. Assurez-vous que le Navigateur Tor est lancé. Erreur: {e}")
+            raise
         except Exception as e:
-            log_message('-', "La connexion au proxy TOR sur le port 9150 a échoué.")
-            raise Exception(f"Assurez-vous que le Navigateur Tor est lancé et que votre pare-feu ne bloque pas la connexion. Erreur: {e}") from e
+            log_message('-', f"Une erreur inattendue est survenue lors de la vérification de l'IP TOR : {e}")
+            raise
     return session
 
 def create_socket(use_tor):

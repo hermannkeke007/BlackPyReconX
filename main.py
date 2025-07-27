@@ -8,7 +8,16 @@ from modules import osint, scanner, exploit_web, exploit_sys, exfiltration, repo
 console = Console()
 
 def main():
-    console.print(Panel("BlackPyReconX - Framework d'Attaque Complet", style="bold green"))
+    banner = r'''
+██████╗ ██╗      █████╗  ██████╗██╗  ██╗██████╗ ██╗   ██╗███████╗██████╗  ██████╗
+██╔══██╗██║     ██╔══██╗██╔════╝██║  ██║██╔══██╗╚██╗ ██╔╝██╔════╝██╔══██╗██╔═══██╗
+██████╔╝██║     ███████║██║     ███████║██████╔╝ ╚████╔╝ █████╗  ██████╔╝██║   ██║
+██╔══██╗██║     ██╔══██║██║     ██╔══██║██╔═══╝   ╚██╔╝  ██╔══╝  ██╔══██╗██║   ██║
+██████╔╝███████╗██║  ██║╚██████╗██║  ██║██║        ██║   ███████╗██║  ██║╚██████╔╝
+╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚═╝        ╚═╝   ╚══════╝╚═╝  ╚═╝ ╚═════╝
+'''
+    console.print(Panel(banner, style="bold green", border_style="green"))
+    console.print(Panel("Framework développé par [bold cyan]Hermann KEKE[/bold cyan]", style="yellow", title="BlackPyReconX", subtitle="[blue]Framework d'Attaque Complet[/blue]"))
     parser = argparse.ArgumentParser(
         description="BlackPyReconX - Framework d'attaque complet",
         epilog="Exemple: python main.py --target exemple.com --osint --scan --tor"
@@ -120,7 +129,7 @@ def main():
             utils.log_message('-', "L'argument --port est obligatoire pour l'attaque DoS.")
             sys.exit(1)
         utils.log_message('*', "Lancement du module d'attaque DoS...")
-        dos.run(args.target, args.port, args.duration)
+        dos.run(args.target, args.port, args.duration, use_tor=use_tor_flag)
 
     if args.bruteforce:
         if not args.service or not args.port:

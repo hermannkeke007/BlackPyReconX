@@ -133,6 +133,12 @@ def run(target, port, duration, use_tor=False, num_threads=200):
 
     if use_tor:
         try:
+            utils.get_requests_session(force_tor=True)
+        except Exception as e:
+            utils.log_message('-', f"Erreur lors de l'initialisation de Tor : {e}")
+            return
+
+        try:
             if ipaddress.ip_address(target).is_private:
                 utils.log_message('!', "AVERTISSEMENT : Vous essayez d'attaquer une IP privée via TOR.")
                 utils.log_message('!', "TOR ne peut pas router vers des adresses locales. L'attaque échouera probablement.")
@@ -140,15 +146,6 @@ def run(target, port, duration, use_tor=False, num_threads=200):
                     return
         except ValueError:
             pass
-
-        try:
-            session = utils.get_requests_session(force_tor=True)
-            ip = session.get("http://httpbin.org/ip").json()['origin']
-            utils.log_message('+', f"Connexion au réseau TOR réussie. IP externe : {ip}")
-        except Exception as e:
-            utils.log_message('-', f"Erreur de connexion TOR : {e}")
-            utils.log_message('-', "Assurez-vous que Tor est lancé (ex: Tor Browser) et accessible sur le port 9150.")
-            return
 
     utils.log_message('!', "AVERTISSEMENT : L'attaque par déni de service (DoS) peut être illégale.")
     utils.log_message('!', "Assurez-vous d'avoir une autorisation explicite avant de l'utiliser.")

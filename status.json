@@ -1,1 +1,4 @@
-{"bot_status": "active"}
+{
+    "bot_status": "inactive",
+    "tor_ip": "178.20.55.16"
+}

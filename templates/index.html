@@ -68,7 +68,7 @@
         <div class="header-container">
             <h1>BlackPyReconX</h1>
             <div class="status-indicators">
-                <div class="status-item"> <span id="tor-status-light" class="status-light status-inactive"></span> TOR </div>
+                <div class="status-item"> <span id="tor-status-light" class="status-light status-inactive"></span> TOR <span id="tor-ip-display"></span></div>
                 <div class="status-item"> <span id="bot-status-light" class="status-light status-inactive"></span> Bot </div>
             </div>
             <div class="theme-switcher">
@@ -385,9 +385,16 @@
             const response = await fetch('/get_tor_status');
             const data = await response.json();
             const light = document.getElementById('tor-status-light');
+            const ipDisplay = document.getElementById('tor-ip-display');
             light.className = 'status-light ' + (data.tor_enabled ? 'status-active' : 'status-inactive');
+            if (data.tor_enabled && data.tor_ip) {
+                ipDisplay.textContent = `(${data.tor_ip})`;
+            } else {
+                ipDisplay.textContent = '';
+            }
         } catch (error) {
             document.getElementById('tor-status-light').className = 'status-light status-inactive';
+            document.getElementById('tor-ip-display').textContent = '';
         }
     }
 

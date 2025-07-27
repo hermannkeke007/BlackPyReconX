@@ -44,7 +44,14 @@ def index():
         'scan': 'Les résultats du scan réseau apparaîtront ici.',
         'web': "Les résultats de l'analyse web apparaîtront ici."
     }
-    return render_template('index.html', results=results)
+    tor_ip = None
+    try:
+        with open('status.json', 'r') as f:
+            status_data = json.load(f)
+            tor_ip = status_data.get('tor_ip')
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return render_template('index.html', results=results, tor_ip=tor_ip)
 
 @app.route('/run_module', methods=['POST'])
 def run_module():
@@ -243,7 +250,14 @@ def view_report(filename):
 @app.route('/get_tor_status', methods=['GET'])
 def get_tor_status():
     config = utils.load_config()
-    return jsonify({'tor_enabled': config.get('use_tor', False)})
+    tor_ip = None
+    try:
+        with open('status.json', 'r') as f:
+            status_data = json.load(f)
+            tor_ip = status_data.get('tor_ip')
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+    return jsonify({'tor_enabled': config.get('use_tor', False), 'tor_ip': tor_ip})
 
 @app.route('/toggle_tor', methods=['POST'])
 def toggle_tor():
