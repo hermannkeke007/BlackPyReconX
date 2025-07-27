@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuration des Rapports - BlackPyReconX</title>
+    <style>
+        :root {
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            --bg-color: #1a1a1a; --text-color: #e0e0e0; --container-bg: #2c2c2c; --input-bg: #3a3a3a; --border-color: #555; --header-color: #4CAF50; --shadow-color: rgba(0,0,0,0.5);
+        }
+        html[data-theme='light'] {
+            --bg-color: #f4f4f4; --text-color: #333; --container-bg: #ffffff; --input-bg: #e9e9e9; --border-color: #ccc; --header-color: #2E7D32; --shadow-color: rgba(0,0,0,0.1);
+        }
+        body { font-family: var(--font-family); background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: auto; background: var(--container-bg); padding: 20px; border-radius: 8px; box-shadow: 0 0 15px var(--shadow-color); }
+        h1 { color: var(--header-color); border-bottom: 2px solid var(--header-color); padding-bottom: 10px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input[type="text"], input[type="email"], input[type="tel"] { width: 100%; padding: 10px; background-color: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 4px; box-sizing: border-box; }
+        input[type="file"] { width: 100%; padding: 10px; }
+        button { font-family: var(--font-family); background-color: var(--header-color); color: white; padding: 12px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; transition: background-color 0.3s; }
+        button:hover { opacity: 0.9; }
+        a { color: var(--header-color); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Configuration des Rapports</h1>
+        <p>Les informations que vous entrez ici seront utilisées pour personnaliser l'en-tête de tous les rapports générés.</p>
+        
+        <form id="config-form" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="company_name">Nom de l'entreprise</label>
+                <input type="text" id="company_name" name="company_name" value="{{ config.company_name }}">
+            </div>
+            <div class="form-group">
+                <label for="direction">Direction</label>
+                <input type="text" id="direction" name="direction" value="{{ config.direction }}">
+            </div>
+            <div class="form-group">
+                <label for="department">Département</label>
+                <input type="text" id="department" name="department" value="{{ config.department }}">
+            </div>
+            <hr>
+            <div class="form-group">
+                <label for="engineer_name">Nom de l'ingénieur</label>
+                <input type="text" id="engineer_name" name="engineer_name" value="{{ config.engineer_name }}">
+            </div>
+            <div class="form-group">
+                <label for="engineer_contact">Contact de l'ingénieur</label>
+                <input type="tel" id="engineer_contact" name="engineer_contact" value="{{ config.engineer_contact }}">
+            </div>
+            <div class="form-group">
+                <label for="engineer_email">Email de l'ingénieur</label>
+                <input type="email" id="engineer_email" name="engineer_email" value="{{ config.engineer_email }}">
+            </div>
+            <hr>
+            <div class="form-group">
+                <label for="logo">Logo de l'entreprise (PNG, JPG)</label>
+                <input type="file" id="logo" name="logo" accept=".png, .jpg, .jpeg">
+                <input type="hidden" id="remove_logo" name="remove_logo" value="false">
+                <p>Logo actuel : <span id="current-logo">{{ config.display_logo or 'Aucun' }}</span> 
+                   <button type="button" id="remove-logo-btn" style="background-color: #c0392b; font-size: 12px; padding: 5px 10px; margin-left: 10px;">Supprimer</button>
+                </p>
+            </div>
+            
+            <button type="submit">Sauvegarder la Configuration</button>
+        </form>
+        <p style="margin-top: 20px;"><a href="/">Retour au tableau de bord principal</a></p>
+    </div>
+
+    <script>
+        // Appliquer le thème stocké dès que possible
+        (function() {
+            const storedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', storedTheme);
+        })();
+
+        // Gérer la soumission du formulaire
+        document.getElementById('config-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            
+            try {
+                const response = await fetch('/config/report', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    alert('Configuration sauvegardée avec succès !');
+                    document.getElementById('current-logo').textContent = result.logo_path || 'Aucun';
+                } else {
+                    throw new Error(result.error || 'Erreur inconnue');
+                }
+            } catch (error) {
+                alert(`Erreur lors de la sauvegarde : ${error.message}`);
+            }
+        });
+
+        // Gérer la suppression du logo
+        document.getElementById('remove-logo-btn').addEventListener('click', function() {
+            if (confirm("Êtes-vous sûr de vouloir supprimer le logo ?")) {
+                document.getElementById('remove_logo').value = 'true';
+                document.getElementById('current-logo').textContent = 'Aucun (sera supprimé à la sauvegarde)';
+                alert('Le logo sera supprimé lors de la prochaine sauvegarde.');
+            }
+        });
+    </script>
+</body>
+</html>

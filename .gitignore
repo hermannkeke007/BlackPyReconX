@@ -1,0 +1,17 @@
+# Fichiers de cache Python
+__pycache__/
+*.pyc
+
+# Fichiers de configuration locaux
+.env
+
+# Fichiers de log
+*.log
+
+# Rapports et sorties générés
+outputs/
+
+# Fichiers de build PyInstaller
+build/
+dist/
+*.spec

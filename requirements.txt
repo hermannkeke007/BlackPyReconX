@@ -1,0 +1,16 @@
+requests[socks]
+beautifulsoup4
+pynput
+pyautogui
+cryptography
+Pillow
+python-telegram-bot
+Flask
+pyinstaller
+fpdf2
+python-dotenv
+paramiko
+mysql-connector-python
+psycopg2-binary
+rich
+scapy 

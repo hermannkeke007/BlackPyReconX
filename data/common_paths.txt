@@ -1,0 +1,31 @@
+# Fichiers et dossiers sensibles courants
+# Administration
+admin/
+administrator/
+login
+admin.php
+login.php
+wp-admin/
+
+# Fichiers de configuration
+.env
+config.php
+config.json
+
+# Dossiers de contrôle de version
+.git/
+.svn/
+
+# Fichiers de sauvegarde
+backup.zip
+backup.sql
+backup.tar.gz
+
+# Fichiers de log
+logs/
+log.txt
+error.log
+
+# Autres
+phpinfo.php
+robots.txt

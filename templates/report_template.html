@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Rapport d'Audit - {{ target }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background-color: #f9f9f9; color: #333; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .header, .footer { text-align: center; margin-bottom: 30px; }
+        .header img { max-width: 200px; max-height: 80px; margin-bottom: 10px; }
+        .header h1 { color: #2c3e50; margin: 0; }
+        .header p { color: #7f8c8d; margin: 5px 0; }
+        h2 { color: #2980b9; border-bottom: 2px solid #3498db; padding-bottom: 10px; margin-top: 30px; }
+        pre { background: #ecf0f1; padding: 15px; border-radius: 5px; white-space: pre-wrap; font-family: 'Courier New', Courier, monospace; border-left: 5px solid #3498db; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ccc; font-size: 0.9em; color: #7f8c8d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            {% if logo_path %}
+                <img src="{{ logo_path }}" alt="Logo de l'entreprise">
+            {% endif %}
+            <h1>{{ company_name or 'Rapport d\'Audit de Sécurité' }}</h1>
+            <p>{{ direction }}</p>
+            <p>{{ department }}</p>
+        </div>
+
+        <h2>Résumé Exécutif</h2>
+        <p>{{ resume_executif }}</p>
+
+        <h2>Détail Technique des Vulnérabilités</h2>
+        <pre>{{ detail_technique }}</pre>
+
+        <h2>Impact Métier Potentiel</h2>
+        <p>{{ impact }}</p>
+
+        <h2>Recommandations de Sécurité</h2>
+        <pre>{{ recommandations }}</pre>
+
+        <h2>Annexes (Logs Bruts)</h2>
+        <pre>{{ annexes }}</pre>
+
+        <div class="footer">
+            <p>Rapport préparé par : {{ engineer_name or 'N/A' }} | {{ engineer_email or 'N/A' }}</p>
+            <p>Date de génération : {{ start_time }}</p>
+        </div>
+    </div>
+</body>
+</html>
