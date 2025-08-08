@@ -225,7 +225,7 @@ Ajoutez également des informations sur la façon de vous contacter par courrier
 
 Si le programme fait une interaction terminale, faites-le sortir un bref avis comme celui-ci au démarrage dans un mode interactif :
 
-<programme> Copyright (C) <2025> <Hermann KEKE>
+       Copyright (C) 2025 Hermann KEKE
 Ce programme est livré avec ABSOLUMENT AUCUNE GARANTIE ; pour plus de détails, tapez « show w ». C'est un logiciel libre, et vous êtes invités à le redistribuer sous certaines conditions ; tapez « show c » pour plus de détails.
 
 Les commandes hypothétiques « show w » et « show c » devraient afficher les parties appropriées de la Licence publique générale. Bien sûr, les commandes de votre programme peuvent être différentes ; pour une interface graphique, vous utiliseriez une « boîte à propos ».
