@@ -16,7 +16,7 @@ logging.basicConfig(filename='app.log', level=logging.ERROR,
 sys.path.append(os.path.join(os.path.dirname(__file__), 'modules'))
 
 # Importer les modules de BlackPyReconX
-from modules import osint, scanner, exploit_web, reporting, exfiltration, utils, dos, bruteforce, sniffer
+from modules import osint, scanner, exploit_web, reporting, exfiltration, utils, dos, bruteforce, sniffer, crypto_tools
 
 
 app = Flask(__name__)
@@ -30,6 +30,10 @@ def add_header(response):
     response.headers['Pragma'] = 'no-cache'
     response.headers['Expires'] = '0'
     return response
+
+@app.route('/favicon.svg')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'data', 'assets'), 'favicon.svg', mimetype='image/svg+xml')
 
 # Variable globale pour l'état de TOR
 USE_TOR = False
@@ -83,6 +87,9 @@ def run_module():
 
         # Pour les modules de scan, on exécute puis on génère un rapport complet
         if module_name in ['osint', 'scan', 'web']:
+            # Créer un répertoire de session pour ce scan
+            session_dir = utils.get_current_session_dir()
+
             # Préparer la session pour les modules qui en ont besoin
             if module_name in ['osint', 'web']:
                 session = utils.get_requests_session(force_tor=use_tor_flag)
@@ -93,23 +100,23 @@ def run_module():
 
             # Exécuter le module de scan
             if module_name == 'osint':
-                osint.run(target)
+                osint.run(target, session_dir)
                 result_file = 'osint.txt'
             elif module_name == 'scan':
-                scanner.run(target, use_tor=use_tor_flag)
+                scanner.run(target, session_dir, use_tor=use_tor_flag)
                 result_file = 'scan_results.txt'
             elif module_name == 'web':
-                exploit_web.run(target)
+                exploit_web.run(target, session_dir)
                 result_file = 'web_vulns.txt'
             
             # Lire le résultat brut pour l'afficher directement
-            output_path = os.path.join(OUTPUTS_DIR, result_file)
+            output_path = os.path.join(session_dir, result_file)
             with open(output_path, 'r', encoding='utf-8', errors='replace') as f:
                 output_content = f.read()
 
             # Générer automatiquement les rapports après le scan
             print(f"[WEB UI] Génération automatique des rapports pour la cible '{target}'")
-            txt_file, pdf_file, html_file = reporting.run(target)
+            txt_file, pdf_file, html_file = reporting.run(target, session_dir)
 
             # Petite pause pour s'assurer que les fichiers sont bien écrits sur le disque
             time.sleep(1)
@@ -198,7 +205,7 @@ def run_module():
         app.logger.error(f'Erreur lors de l\'exécution du module {module_name}', exc_info=True)
         return jsonify({'error': f'Une erreur interne est survenue. Consultez app.log pour les détails.'}), 500
 
-# --- ROUTES POUR L'ATTAQUE DoS ---
+# --- ROUTES POUR L\'ATTAQUE DoS ---
 
 @app.route('/dos/start', methods=['POST'])
 def start_dos():
@@ -214,7 +221,7 @@ def start_dos():
         dos.start_attack(target, int(port), int(duration))
         return jsonify({'message': 'Attaque DoS démarrée.'})
     except Exception as e:
-        return jsonify({'error': f"Erreur lors du démarrage de l'attaque: {e}"}), 500
+        return jsonify({'error': f"Erreur lors du démarrage de l\'attaque: {e}"}), 500
 
 @app.route('/dos/status', methods=['GET'])
 def dos_status():
@@ -226,7 +233,7 @@ def stop_dos():
         dos.stop_attack()
         return jsonify({'message': 'Attaque DoS arrêtée.'})
     except Exception as e:
-        return jsonify({'error': f"Erreur lors de l'arrêt de l'attaque: {e}"}), 500
+        return jsonify({'error': f"Erreur lors de l\'arrêt de l\'attaque: {e}"}), 500
 
 # --- ROUTES POUR LA GESTION DES SERVICES ET TÉLÉCHARGEMENTS ---
 
@@ -244,12 +251,19 @@ def download_file(filename):
 
 @app.route('/view/report/<path:filename>')
 def view_report(filename):
-    """Sert un fichier rapport pour l'affichage dans le navigateur."""
+    """Sert un fichier rapport pour l\'affichage dans le navigateur."""
     return send_from_directory(OUTPUTS_DIR, filename)
 
 @app.route('/get_tor_status', methods=['GET'])
 def get_tor_status():
     config = utils.load_config()
+    use_tor = config.get('use_tor', False)
+    if use_tor:
+        try:
+            utils.get_requests_session(force_tor=True)
+        except Exception:
+            pass # L'erreur est déjà loggée dans get_requests_session
+
     tor_ip = None
     try:
         with open('status.json', 'r') as f:
@@ -257,7 +271,7 @@ def get_tor_status():
             tor_ip = status_data.get('tor_ip')
     except (FileNotFoundError, json.JSONDecodeError):
         pass
-    return jsonify({'tor_enabled': config.get('use_tor', False), 'tor_ip': tor_ip})
+    return jsonify({'tor_enabled': use_tor, 'tor_ip': tor_ip})
 
 @app.route('/toggle_tor', methods=['POST'])
 def toggle_tor():
@@ -265,8 +279,6 @@ def toggle_tor():
     config['use_tor'] = not config.get('use_tor', False)
     utils.save_config(config)
     return jsonify({'tor_enabled': config['use_tor']})
-
-
 
 
 
@@ -305,7 +317,7 @@ def configure_report():
         with open(REPORT_CONFIG_PATH, 'w') as f:
             json.dump(config, f, indent=4)
         
-        # Renvoyer uniquement le nom du fichier pour l'affichage
+        # Renvoyer uniquement le nom du fichier pour l\'affichage
         display_logo = os.path.basename(config['logo_path']) if config.get('logo_path') else ''
         return jsonify({'message': 'Configuration sauvegardée', 'logo_path': display_logo})
 
@@ -359,9 +371,6 @@ def bot_status():
     except (FileNotFoundError, json.JSONDecodeError):
         return jsonify({'running': False})
 
-if __name__ == '__main__':
-    print("[*] Pour lancer l'interface web, exécutez la commande : flask --app app run")
-
 # --- ROUTES POUR LA GESTION DES RAPPORTS ---
 
 @app.route('/api/reports', methods=['GET'])
@@ -400,8 +409,6 @@ def delete_report():
     else:
         return jsonify({'error': 'Fichier non trouvé'}), 404
 
-        return jsonify({'error': str(e)}), 500
-
 # --- ROUTES POUR LE SNIFFER ---
 
 @app.route('/api/interfaces', methods=['GET'])
@@ -429,8 +436,6 @@ def sniffer_status():
 def stop_sniffer():
     result = sniffer.stop()
     return jsonify(result)
-
-
 
 # --- ROUTES POUR LA CONFIGURATION DU PAYLOAD ---
 
@@ -483,10 +488,10 @@ def set_payload_config():
         with open(PAYLOAD_FILE, 'r', encoding='utf-8') as f:
             content = f.read()
 
-        # Remplacer l'IP
-        content = re.sub(r"(REVERSE_HOST\s*=\s*')[^']+'(')", f"\\1{new_host}\\2", content)
-        # Remplacer la date
-        content = re.sub(r"(ACTIVATION_DATE\s*=\s*datetime\.date\()\d+,\s*\d+,\s*\d+(\))", f"\\1{year}, {month}, {day}\\2", content)
+        # Remplacer l\'IP de manière robuste
+        content = re.sub(r"(REVERSE_HOST\s*=\s*')([^']*)(')", rf"\1{new_host}\3", content)
+        # Remplacer la date de manière robuste
+        content = re.sub(r"(ACTIVATION_DATE\s*=\s*datetime\.date\()([^)]*)(\))", rf"\1{year}, {month}, {day}\3", content)
 
         with open(PAYLOAD_FILE, 'w', encoding='utf-8') as f:
             f.write(content)
@@ -495,3 +500,71 @@ def set_payload_config():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# --- ROUTES POUR LA STÉGANOGRAPHIE ---
+
+@app.route('/stegano/hide', methods=['POST'])
+def stegano_hide():
+    if 'image' not in request.files or 'secret' not in request.files:
+        return "Erreur: Fichiers manquants.", 400
+    
+    image_file = request.files['image']
+    secret_file = request.files['secret']
+
+    if image_file.filename == '' or secret_file.filename == '':
+        return "Erreur: Fichiers non sélectionnés.", 400
+
+    image_filename = secure_filename(image_file.filename)
+    secret_filename = secure_filename(secret_file.filename)
+    
+    temp_image_path = os.path.join(OUTPUTS_DIR, image_filename)
+    temp_secret_path = os.path.join(OUTPUTS_DIR, secret_filename)
+    
+    image_file.save(temp_image_path)
+    secret_file.save(temp_secret_path)
+
+    output_filename = "stegano_" + image_filename
+    output_path = os.path.join(OUTPUTS_DIR, output_filename)
+
+    result = crypto_tools.stegano_hide_file(temp_image_path, temp_secret_path, output_path)
+
+    os.remove(temp_image_path)
+    os.remove(temp_secret_path)
+
+    if "Succès" in result:
+        return send_from_directory(OUTPUTS_DIR, output_filename, as_attachment=True)
+    else:
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        return result, 500
+
+@app.route('/stegano/reveal', methods=['POST'])
+def stegano_reveal():
+    if 'image' not in request.files:
+        return "Erreur: Fichier image manquant.", 400
+    
+    image_file = request.files['image']
+
+    if image_file.filename == '':
+        return "Erreur: Fichier non sélectionné.", 400
+
+    image_filename = secure_filename(image_file.filename)
+    temp_image_path = os.path.join(OUTPUTS_DIR, image_filename)
+    image_file.save(temp_image_path)
+
+    output_filename = "revealed_secret.dat"
+    output_path = os.path.join(OUTPUTS_DIR, output_filename)
+
+    result = crypto_tools.stegano_reveal_file(temp_image_path, output_path)
+
+    os.remove(temp_image_path)
+
+    if "Succès" in result:
+        return send_from_directory(OUTPUTS_DIR, output_filename, as_attachment=True)
+    else:
+        if os.path.exists(output_path):
+            os.remove(output_path)
+        return result, 500
+
+if __name__ == '__main__':
+    print("[*] Pour lancer l'interface web, exécutez la commande : flask --app app run")

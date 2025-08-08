@@ -35,7 +35,7 @@ def obfuscate_script(script_path: str, output_filename: str = "update_check.py")
         # Déterminer le chemin de sortie (à côté du script original)
         output_path = os.path.join(os.path.dirname(script_path), output_filename)
         
-        with open(output_path, 'w') as f:
+        with open(output_path, 'w', encoding='utf-8') as f:
             f.write(launcher_content)
             
         print(f"[+] Script obfusqué avec succès.")

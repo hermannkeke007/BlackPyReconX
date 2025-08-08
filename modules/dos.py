@@ -132,12 +132,7 @@ def run(target, port, duration, use_tor=False, num_threads=200):
         return
 
     if use_tor:
-        try:
-            utils.get_requests_session(force_tor=True)
-        except Exception as e:
-            utils.log_message('-', f"Erreur lors de l'initialisation de Tor : {e}")
-            return
-
+        utils.log_message('*', "Utilisation de TOR activée. Assurez-vous que TOR est lancé sur le port 9050.")
         try:
             if ipaddress.ip_address(target).is_private:
                 utils.log_message('!', "AVERTISSEMENT : Vous essayez d'attaquer une IP privée via TOR.")

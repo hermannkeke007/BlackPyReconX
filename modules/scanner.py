@@ -3,6 +3,7 @@ import subprocess
 import os
 import re
 import threading
+import time
 from queue import Queue
 from . import utils
 
@@ -127,7 +128,7 @@ def get_status():
             "open_ports": len(scan_state["open_ports"])
         }
 
-def run(target, use_tor=False):
+def run(target, session_dir, use_tor=False):
     if use_tor:
         try:
             utils.get_requests_session(force_tor=True)
@@ -162,8 +163,8 @@ def run(target, use_tor=False):
     else:
         results += "Aucun port ouvert trouvé parmi les ports courants.\n"
 
-    output_path = os.path.join(os.path.dirname(__file__), '..', 'outputs', 'scan_results.txt')
-    with open(output_path, 'w') as f:
+    output_path = os.path.join(session_dir, 'scan_results.txt')
+    with open(output_path, 'w', encoding='utf-8') as f:
         f.write(results)
 
     utils.log_message('+', f"Résultats du scan enregistrés dans {output_path}")

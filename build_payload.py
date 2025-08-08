@@ -35,7 +35,7 @@ def build():
     ]
     
     try:
-        process = subprocess.run(pyinstaller_command, check=True, capture_output=True, text=True)
+        process = subprocess.run(pyinstaller_command, check=True, capture_output=True, text=True, encoding='utf-8')
         final_payload_path = os.path.join(OUTPUT_DIR, PAYLOAD_NAME)
         print(f"\n[+] Payload créé avec succès ! Il se trouve ici : {final_payload_path}")
     except subprocess.CalledProcessError as e:

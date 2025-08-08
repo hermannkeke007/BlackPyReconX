@@ -54,7 +54,7 @@ def fetch_shodan(target, api_key, results_dict):
     except requests.exceptions.RequestException as e:
         results_dict['shodan'] = f"--- SHODAN.IO ---\nErreur: {e}\n"
 
-def run(target):
+def run(target, session_dir):
     if session is None:
         raise Exception("La session de requêtes n'a pas été initialisée.")
 
@@ -88,7 +88,7 @@ def run(target):
         results.get('shodan', '')
     )
 
-    output_path = os.path.join(os.path.dirname(__file__), '..', 'outputs', 'osint.txt')
+    output_path = os.path.join(session_dir, 'osint.txt')
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(final_results)
 

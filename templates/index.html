@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BlackPyReconX - Dashboard</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <style>
         :root {
             --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -68,8 +69,13 @@
         <div class="header-container">
             <h1>BlackPyReconX</h1>
             <div class="status-indicators">
-                <div class="status-item"> <span id="tor-status-light" class="status-light status-inactive"></span> TOR <span id="tor-ip-display"></span></div>
-                <div class="status-item"> <span id="bot-status-light" class="status-light status-inactive"></span> Bot </div>
+                <div class="status-item"> 
+                    <span id="tor-status-light" class="status-light status-inactive"></span> 
+                    TOR <span id="tor-ip-display" style="font-size: 0.9em; color: #aaa;"></span>
+                </div>
+                <div class="status-item"> 
+                    <span id="bot-status-light" class="status-light status-inactive"></span> Bot 
+                </div>
             </div>
             <div class="theme-switcher">
                 <span id="theme-label">Mode Nuit</span>
@@ -265,6 +271,37 @@
             </div>
 
             <button onclick="runBruteforceAttack()" class="special">Lancer le Brute-Force</button>
+        </div>
+
+        <div class="card">
+            <h2>Outils de Stéganographie</h2>
+            <p>Cachez ou révélez des fichiers dans des images.</p>
+            
+            <!-- Formulaire pour cacher -->
+            <form action="/stegano/hide" method="post" enctype="multipart/form-data" style="margin-bottom: 20px;">
+                <h3>Cacher un fichier</h3>
+                <div class="form-group">
+                    <label for="hide-image">Image de couverture (PNG, JPG)</label>
+                    <input type="file" id="hide-image" name="image" accept="image/png, image/jpeg" required>
+                </div>
+                <div class="form-group">
+                    <label for="hide-file">Fichier à cacher</label>
+                    <input type="file" id="hide-file" name="secret" required>
+                </div>
+                <button type="submit">Cacher le fichier</button>
+            </form>
+
+            <hr style="border-color: var(--border-color); margin: 20px 0;">
+
+            <!-- Formulaire pour révéler -->
+            <form action="/stegano/reveal" method="post" enctype="multipart/form-data">
+                <h3>Révéler un fichier</h3>
+                <div class="form-group">
+                    <label for="reveal-image">Image contenant le secret (PNG)</label>
+                    <input type="file" id="reveal-image" name="image" accept="image/png" required>
+                </div>
+                <button type="submit">Révéler le secret</button>
+            </form>
         </div>
     </div>
 

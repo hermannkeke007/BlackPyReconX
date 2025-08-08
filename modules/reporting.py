@@ -7,14 +7,14 @@ import os
 
 OUTPUTS_DIR = os.path.join(os.path.dirname(__file__), '..', 'outputs')
 
-def read_output_file(filename):
-    """Lit le contenu d'un fichier de résultats s'il existe."""
+def read_output_file(filename, session_dir):
+    """Lit le contenu d'un fichier de résultats s'il existe dans le répertoire de session."""
     try:
-        path = os.path.join(OUTPUTS_DIR, filename)
+        path = os.path.join(session_dir, filename)
         with open(path, 'r', encoding='utf-8', errors='replace') as f:
             return f.read()
     except FileNotFoundError:
-        return f"Le fichier de résultats '{filename}' n'a pas été trouvé.\n"
+        return f"Le fichier de résultats '{filename}' n'a pas été trouvé dans la session.\n"
     except Exception as e:
         return f"Erreur lors de la lecture du fichier {filename}: {e}\n"
 
@@ -163,7 +163,7 @@ def generate_professional_report(data):
     # --- 3. Impact ---
     impact = ""
     if critical_vulns:
-        impact += "Un attaquant exploitant ces vulnérabilités pourrait potentiellement :\n"
+        impact += "Un attaquant exploitant ces vulnérabilités pourrait potentiellement:\n"
         if "Injection SQL" in critical_vulns or "Inclusion de Fichier Local (LFI)" in critical_vulns:
             impact += "- Accéder, modifier ou supprimer des données sensibles de la base de données.\n"
             impact += "- Obtenir un accès non autorisé au système de fichiers du serveur.\n"
@@ -198,9 +198,9 @@ def markdown_to_html(text):
     text = text.replace('**', '</b>', 1) # Deuxième devient </b>
     return text
 
-def run(target):
-    """Génère le rapport final en consolidant les résultats."""
-    print("[+] Génération du rapport final professionnel...")
+def run(target, session_dir):
+    """Génère le rapport final en consolidant les résultats d'une session spécifique."""
+    print(f"[+] Génération du rapport final professionnel pour la session : {session_dir}...")
 
     start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     timestamp_filename = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -211,13 +211,13 @@ def run(target):
     report_data = {
         'target': target,
         'start_time': start_time,
-        'osint_results': read_output_file('osint.txt'),
-        'scan_results': read_output_file('scan_results.txt'),
-        'web_vulns_results': read_output_file('web_vulns.txt'),
-        'keylog_status': "Fichier de log trouvé." if os.path.exists(os.path.join(OUTPUTS_DIR, 'keylogs', 'keylog.txt')) else "Aucun log trouvé.",
-        'screenshot_status': "Capture trouvée." if os.path.exists(os.path.join(OUTPUTS_DIR, 'screenshots', 'screenshot.png')) else "Aucune capture trouvée.",
+        'osint_results': read_output_file('osint.txt', session_dir),
+        'scan_results': read_output_file('scan_results.txt', session_dir),
+        'web_vulns_results': read_output_file('web_vulns.txt', session_dir),
+        'keylog_status': "Fichier de log trouvé." if os.path.exists(os.path.join(session_dir, 'keylogs', 'keylog.txt')) else "Aucun log trouvé.",
+        'screenshot_status': "Capture trouvée." if os.path.exists(os.path.join(session_dir, 'screenshots', 'screenshot.png')) else "Aucune capture trouvée.",
         'shell_status': "Tentative de connexion effectuée (vérifier manuellement).",
-        'exfil_status': "Succès." if any(f.endswith('.zip.enc') for f in os.listdir(OUTPUTS_DIR)) else "Non effectuée ou échec."
+        'exfil_status': "Succès." if any(f.endswith('.zip.enc') for f in os.listdir(session_dir)) else "Non effectuée ou échec."
     }
 
     # Charger la configuration de branding

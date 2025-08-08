@@ -1,6 +1,7 @@
 import os
 import zipfile
 from datetime import datetime
+from cryptography.fernet import Fernet
 
 # Importer les outils de chiffrement du module crypto_tools
 from . import crypto_tools
@@ -36,13 +37,14 @@ def encrypt_file(file_path: str) -> (str, bytes):
     print(f"[*] Chiffrement de {file_path}...")
     
     # Générer une nouvelle clé pour chaque exfiltration
-    key = crypto_tools.generate_fernet_key()
+    key = Fernet.generate_key()
+    fernet = Fernet(key)
     
     try:
         with open(file_path, 'rb') as f:
             data = f.read()
         
-        encrypted_data = crypto_tools.encrypt_fernet(data, key)
+        encrypted_data = fernet.encrypt(data)
         
         encrypted_file_path = file_path + ".enc"
         with open(encrypted_file_path, 'wb') as f:

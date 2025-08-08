@@ -10,7 +10,7 @@ STATUS_FILE = 'status.json'
 import os
 
 commands = {
-    "Interface Web (Flask)": [sys.executable, "-m", "flask", "--app", "app", "run"],
+    "Interface Web (Flask)": [sys.executable, "-m", "flask", "--app", "app", "--debug", "run"],
     "Bot Telegram": [sys.executable, os.path.join("modules", "telegram_bot.py")]
 }
 

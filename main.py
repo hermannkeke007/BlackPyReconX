@@ -1,23 +1,24 @@
 import argparse
 import sys
 import os
+import time
 from rich.console import Console
 from rich.panel import Panel
-from modules import osint, scanner, exploit_web, exploit_sys, exfiltration, reporting, utils, dos, bruteforce, sniffer
+from modules import osint, scanner, exploit_web, exploit_sys, exfiltration, reporting, utils, dos, bruteforce, sniffer, crypto_tools
 
 console = Console()
 
 def main():
-    banner = r'''
-██████╗ ██╗      █████╗  ██████╗██╗  ██╗██████╗ ██╗   ██╗███████╗██████╗  ██████╗
-██╔══██╗██║     ██╔══██╗██╔════╝██║  ██║██╔══██╗╚██╗ ██╔╝██╔════╝██╔══██╗██╔═══██╗
-██████╔╝██║     ███████║██║     ███████║██████╔╝ ╚████╔╝ █████╗  ██████╔╝██║   ██║
-██╔══██╗██║     ██╔══██║██║     ██╔══██║██╔═══╝   ╚██╔╝  ██╔══╝  ██╔══██╗██║   ██║
-██████╔╝███████╗██║  ██║╚██████╗██║  ██║██║        ██║   ███████╗██║  ██║╚██████╔╝
-╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚═╝        ╚═╝   ╚══════╝╚═╝  ╚═╝ ╚═════╝
-'''
-    console.print(Panel(banner, style="bold green", border_style="green"))
-    console.print(Panel("Framework développé par [bold cyan]Hermann KEKE[/bold cyan]", style="yellow", title="BlackPyReconX", subtitle="[blue]Framework d'Attaque Complet[/blue]"))
+    # banner = r'''
+    # ██████╗ ██╗      █████╗  ██████╗██╗  ██╗██████╗ ██╗   ██╗███████╗██████╗  ██████╗
+    # ██╔══██╗██║     ██╔══██╗██╔════╝██║  ██║██╔══██╗╚██╗ ██╔╝██╔════╝██╔══██╗██╔═══██╗
+    # ██████╔╝██║     ███████║██║     ███████║██████╔╝ ╚████╔╝ █████╗  ██████╔╝██║   ██║
+    # ██╔══██╗██║     ██╔══██║██║     ██╔══██║██╔═══╝   ╚██╔╝  ██╔══╝  ██╔══██╗██║   ██║
+    # ██████╔╝███████╗██║  ██║╚██████╗██║  ██║██║        ██║   ███████╗██║  ██║╚██████╔╝
+    # ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚═╝        ╚═╝   ╚══════╝╚═╝  ╚═╝ ╚═════╝
+    # '''
+    # console.print(Panel(banner, style="bold green", border_style="green"))
+    console.print(Panel("Framework développé par [bold cyan]Hermann KEKE[/bold cyan]", style="yellow", title="[bold green]BlackPyReconX[/bold green]", subtitle="[blue]Framework d'Attaque Complet[/blue]"))
     parser = argparse.ArgumentParser(
         description="BlackPyReconX - Framework d'attaque complet",
         epilog="Exemple: python main.py --target exemple.com --osint --scan --tor"
@@ -41,6 +42,13 @@ def main():
     sniffer_group.add_argument("--filter", help="Filtre de capture (format BPF)")
     sniffer_group.add_argument("--count", type=int, default=0, help="Nombre de paquets à capturer (0 pour infini)")
     sniffer_group.add_argument("--output", help="Fichier de sortie pour la capture (.pcap)")
+
+    # Module Crypto
+    crypto_group = parser.add_argument_group('Crypto & Stegano Options')
+    crypto_group.add_argument("--stegano-hide", action="store_true", help="Cacher un fichier dans une image")
+    crypto_group.add_argument("--stegano-reveal", action="store_true", help="Révéler un fichier caché dans une image")
+    crypto_group.add_argument("--image", help="Chemin de l'image pour la stéganographie")
+    crypto_group.add_argument("--file", help="Chemin du fichier à cacher/révéler")
 
     # Options générales
     parser.add_argument("--port", type=int, help="Port à utiliser pour l'attaque DoS ou Brute-Force")
@@ -75,6 +83,23 @@ def main():
         
     args = parser.parse_args()
 
+    # --- Gestion des modules autonomes (Crypto) ---
+    if args.stegano_hide:
+        if not all([args.image, args.file, args.output]):
+            utils.log_message('-', "Les arguments --image, --file, et --output sont requis pour --stegano-hide.")
+            sys.exit(1)
+        result = crypto_tools.stegano_hide_file(args.image, args.file, args.output)
+        utils.log_message('+' if 'Succès' in result else '-', result)
+        sys.exit(0)
+
+    if args.stegano_reveal:
+        if not all([args.image, args.output]):
+            utils.log_message('-', "Les arguments --image et --output sont requis pour --stegano-reveal.")
+            sys.exit(1)
+        result = crypto_tools.stegano_reveal_file(args.image, args.output)
+        utils.log_message('+' if 'Succès' in result else '-', result)
+        sys.exit(0)
+
     if not args.target and not args.exfil and not args.sniff:
         utils.log_message('-', "L'argument --target est obligatoire pour la plupart des modules.")
         parser.print_help(sys.stderr)
@@ -82,6 +107,10 @@ def main():
 
     if args.target:
         utils.log_message('*', f"Cible configurée : {args.target}")
+        # Créer un répertoire de session pour cette exécution
+        session_dir = utils.get_current_session_dir()
+    else:
+        session_dir = None
 
     # --- Nettoyage sélectif des anciens résultats ---
     if args.osint:
@@ -106,17 +135,17 @@ def main():
 
     if args.osint:
         utils.log_message('*', "Lancement du module OSINT...")
-        osint.run(args.target)
+        osint.run(args.target, session_dir)
         report_needed = True
     
     if args.scan:
         utils.log_message('*', "Lancement du module de scan...")
-        scanner.run(args.target, use_tor=use_tor_flag)
+        scanner.run(args.target, session_dir, use_tor=use_tor_flag)
         report_needed = True
 
     if args.web:
         utils.log_message('*', "Lancement du module d'exploitation web...")
-        exploit_web.run(args.target)
+        exploit_web.run(args.target, session_dir)
         report_needed = True
 
     if args.exploit:
@@ -188,12 +217,37 @@ def main():
 
     if args.sniff:
         utils.log_message('*', "Lancement du module Sniffer...")
-        sniffer.run(iface=args.iface, filter=args.filter, count=args.count, output=args.output)
+        result = sniffer.start(iface=args.iface, filter=args.filter, count=args.count, output=args.output)
+        if result.get('error'):
+            utils.log_message('-', result['error'])
+            sys.exit(1)
+        
+        utils.log_message('+', result['message'])
+        utils.log_message('*', "Appuyez sur Ctrl+C pour arrêter la capture.")
+
+        try:
+            while True:
+                status = sniffer.get_status()
+                if not status['running'] and args.count > 0:
+                    break # Sortir si le nombre de paquets est atteint
+                
+                for packet in status['packets']:
+                    console.print(f"  [green]Paquet capturé:[//] {packet}")
+                time.sleep(1)
+        except KeyboardInterrupt:
+            utils.log_message('!', "\nInterruption manuelle détectée. Arrêt de la capture...")
+        finally:
+            stop_result = sniffer.stop()
+            if 'message' in stop_result:
+                utils.log_message('+', stop_result['message'])
+            elif 'error' in stop_result:
+                utils.log_message('-', stop_result['error'])
+            sys.exit(0)
 
     # Génération du rapport si nécessaire ou demandé
     if report_needed or args.report:
         utils.log_message('*', "Génération du rapport...")
-        txt_file, pdf_file, html_file = reporting.run(args.target)
+        txt_file, pdf_file, html_file = reporting.run(args.target, session_dir)
         utils.log_message('+', f"Rapport TXT généré : {txt_file}")
         utils.log_message('+', f"Rapport PDF généré : {pdf_file}")
         utils.log_message('+', f"Rapport HTML généré : {html_file}")

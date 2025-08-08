@@ -1,3 +1,4 @@
+
 import os
 import sys
 import json
@@ -22,24 +23,23 @@ from telegram.ext import (
 from dotenv import load_dotenv
 load_dotenv()
 
-from modules import osint, scanner, exploit_web, reporting, exfiltration, utils, dos, bruteforce
+from modules import osint, scanner, exploit_web, reporting, exfiltration, utils, dos, bruteforce, crypto_tools
 
 # États pour la conversation
-SELECTING_ACTION, AWAITING_TARGET, AWAITING_CONFIRMATION, AWAITING_DOS_PORT, AWAITING_DOS_DURATION, AWAITING_BRUTEFORCE_SERVICE, AWAITING_BRUTEFORCE_USERLIST, AWAITING_BRUTEFORCE_PASSLIST, AWAITING_DOS_TOR, AWAITING_STOP, AWAITING_BRUTEFORCE_TYPE, AWAITING_BRUTEFORCE_USERNAME, AWAITING_BRUTEFORCE_CHARSET, AWAITING_BRUTEFORCE_MIN_LEN, AWAITING_BRUTEFORCE_MAX_LEN, AWAITING_BRUTEFORCE_URL, AWAITING_BRUTEFORCE_USER_FIELD, AWAITING_BRUTEFORCE_PASS_FIELD, AWAITING_BRUTEFORCE_FAIL_STRING = range(19)
+(SELECTING_ACTION, AWAITING_TARGET, AWAITING_CONFIRMATION,
+AWAITING_DOS_PORT, AWAITING_DOS_DURATION, AWAITING_DOS_TOR,
+AWAITING_BRUTEFORCE_SERVICE, AWAITING_BRUTEFORCE_TYPE,
+AWAITING_BRUTEFORCE_USERLIST, AWAITING_BRUTEFORCE_PASSLIST,
+AWAITING_BRUTEFORCE_USERNAME, AWAITING_BRUTEFORCE_CHARSET,
+AWAITING_BRUTEFORCE_MIN_LEN, AWAITING_BRUTEFORCE_MAX_LEN,
+AWAITING_BRUTEFORCE_URL, AWAITING_BRUTEFORCE_USER_FIELD,
+AWAITING_BRUTEFORCE_PASS_FIELD, AWAITING_BRUTEFORCE_FAIL_STRING,
+AWAITING_STOP,
+SELECTING_STEGANO_ACTION, AWAITING_STEGANO_IMAGE_HIDE,
+AWAITING_STEGANO_SECRET_FILE, AWAITING_STEGANO_IMAGE_REVEAL) = range(23)
 
-# Config globale
-def load_config():
-    try:
-        with open(os.path.join(os.path.dirname(__file__), '..', 'config.json'), 'r') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return {}
+# --- MENUS ET HANDLERS DE BASE ---
 
-def save_config(config_data):
-    with open(os.path.join(os.path.dirname(__file__), '..', 'config.json'), 'w') as f:
-        json.dump(config_data, f, indent=4)
-
-# Menu principal
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     keyboard = [
         [InlineKeyboardButton("🔍 OSINT", callback_data='osint'),
@@ -49,7 +49,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         [InlineKeyboardButton("📦 Exfiltration", callback_data='exfil'),
          InlineKeyboardButton("💥 Attaque DoS", callback_data='dos'),
          InlineKeyboardButton("💪 Force Brute", callback_data='bruteforce')],
-        [InlineKeyboardButton("🔒 Gérer TOR", callback_data='tor_menu')],
+        [InlineKeyboardButton("🖼️ Stéganographie", callback_data='stegano'),
+         InlineKeyboardButton("🔒 Gérer TOR", callback_data='tor_menu')],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     text = "🤖 *Bienvenue sur le bot de contrôle BlackPyReconX*\n\nChoisissez une action à exécuter :"
@@ -61,7 +62,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     return SELECTING_ACTION
 
-# Sélection de cible
+async def back_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data.clear()
+    return await start(update, context)
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    if query:
+        await query.answer()
+        await query.edit_message_text("Opération annulée.")
+    else:
+        await update.message.reply_text("Opération annulée.")
+    return await back_to_main_menu(update, context)
+
+# --- HANDLERS POUR LES MODULES ---
+
 async def ask_for_target(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -104,169 +119,28 @@ async def handle_dos_port_input(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def handle_dos_duration_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data['duration'] = update.message.text
-    keyboard = [
-        [InlineKeyboardButton("✅ Oui", callback_data='dos_tor_yes'),
-         InlineKeyboardButton("❌ Non", callback_data='dos_tor_no')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("🔒 Voulez-vous utiliser TOR pour cette attaque ?", reply_markup=reply_markup)
-    return AWAITING_DOS_TOR
-
-async def handle_dos_tor_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    context.user_data['use_tor'] = query.data == 'dos_tor_yes'
     return await confirm_action(update, context)
 
 async def handle_bruteforce_service_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     context.user_data['service'] = query.data
-    keyboard = [
-        [InlineKeyboardButton("📖 Dictionnaire", callback_data='dictionary')],
-        [InlineKeyboardButton("⚙️ Force Brute Pure", callback_data='bruteforce')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text("⚔️ Choisissez le type d'attaque :", reply_markup=reply_markup)
-    return AWAITING_BRUTEFORCE_TYPE
+    await query.edit_message_text("👤 Entrez le chemin vers la liste d'utilisateurs (ex: data/usernames.txt) :")
+    return AWAITING_BRUTEFORCE_USERLIST
 
 async def handle_bruteforce_userlist_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data['userlist'] = update.message.text
     await update.message.reply_text("🔑 Entrez le chemin vers la liste de mots de passe (ex: data/passwords.txt) :")
     return AWAITING_BRUTEFORCE_PASSLIST
 
-async def handle_bruteforce_type_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    context.user_data['attack_type'] = query.data
-
-    if context.user_data.get('service') == 'web':
-        await query.edit_message_text("🌐 Entrez l'URL de la page de connexion :")
-        return AWAITING_BRUTEFORCE_URL
-
-    if query.data == 'dictionary':
-        await query.edit_message_text("👤 Entrez le chemin vers la liste d'utilisateurs (ex: data/usernames.txt) :")
-        return AWAITING_BRUTEFORCE_USERLIST
-    else:
-        await query.edit_message_text("👤 Entrez le nom d'utilisateur unique à cibler :")
-        return AWAITING_BRUTEFORCE_USERNAME
-
-async def handle_bruteforce_url_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['url'] = update.message.text
-    await update.message.reply_text("👤 Entrez le nom du champ utilisateur :")
-    return AWAITING_BRUTEFORCE_USER_FIELD
-
-async def handle_bruteforce_user_field_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['user_field'] = update.message.text
-    await update.message.reply_text("🔑 Entrez le nom du champ mot de passe :")
-    return AWAITING_BRUTEFORCE_PASS_FIELD
-
-async def handle_bruteforce_pass_field_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['pass_field'] = update.message.text
-    await update.message.reply_text("❌ Entrez la chaîne de caractères indiquant un échec de connexion :")
-    return AWAITING_BRUTEFORCE_FAIL_STRING
-
-async def handle_bruteforce_fail_string_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['fail_string'] = update.message.text
-    if context.user_data.get('attack_type') == 'dictionary':
-        await update.message.reply_text("👤 Entrez le chemin vers la liste d'utilisateurs (ex: data/usernames.txt) :")
-        return AWAITING_BRUTEFORCE_USERLIST
-    else:
-        await update.message.reply_text("👤 Entrez le nom d'utilisateur unique à cibler :")
-        return AWAITING_BRUTEFORCE_USERNAME
-
-async def handle_bruteforce_username_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['username'] = update.message.text
-    keyboard = [
-        [InlineKeyboardButton("Alphanumérique", callback_data='alphanum'),
-         InlineKeyboardButton("Numérique", callback_data='digits')],
-        [InlineKeyboardButton("Minuscules", callback_data='lower'),
-         InlineKeyboardButton("Majuscules", callback_data='upper')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("🔠 Choisissez le jeu de caractères :", reply_markup=reply_markup)
-    return AWAITING_BRUTEFORCE_CHARSET
-
-async def handle_bruteforce_charset_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    context.user_data['charset'] = query.data
-    await query.edit_message_text("🔢 Entrez la longueur minimale du mot de passe :")
-    return AWAITING_BRUTEFORCE_MIN_LEN
-
-async def handle_bruteforce_min_len_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['min_len'] = update.message.text
-    await update.message.reply_text("🔢 Entrez la longueur maximale du mot de passe :")
-    return AWAITING_BRUTEFORCE_MAX_LEN
-
-async def handle_bruteforce_max_len_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['max_len'] = update.message.text
-    return await confirm_action(update, context)
-
 async def handle_bruteforce_passlist_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data['passlist'] = update.message.text
     return await confirm_action(update, context)
 
-async def stop_task(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    module = context.user_data.get('module')
-
-    if module == 'dos':
-        dos.stop_attack()
-    elif module == 'scan':
-        scanner.stop_scan()
-    elif module == 'bruteforce':
-        bruteforce.stop_bruteforce()
-    
-    await query.edit_message_text("🛑 Ordre d'arrêt envoyé.")
-    return SELECTING_ACTION
-
-# Confirmation avant lancement
 async def confirm_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     module = context.user_data.get('module')
     target = context.user_data.get('target', 'N/A')
-
-    if module == 'dos':
-        port = context.user_data.get('port')
-        duration = context.user_data.get('duration')
-        use_tor = context.user_data.get('use_tor', False)
-        tor_ip_message = ""
-        if use_tor:
-            try:
-                session = utils.get_requests_session(force_tor=True)
-                ip = session.get("https://httpbin.org/ip").json()['origin']
-                tor_ip_message = f"\n  - *IP Tor* : `{ip}`"
-            except Exception as e:
-                tor_ip_message = f"\n  - *IP Tor* : `Erreur - {e}`"
-
-        text = f"""⚠️ *CONFIRMATION REQUISE* ⚠️\n\nVous êtes sur le point de lancer une attaque DoS.\n\n  - *Module* : `{module.upper()}`\n  - *Cible* : `{target}`\n  - *Port* : `{port}`\n  - *Durée* : `{duration} secondes`{tor_ip_message}\n\n*Assurez-vous d'avoir une autorisation explicite.*\nConfirmez-vous le lancement ?"""
-    elif module == 'bruteforce':
-        attack_type = context.user_data.get('attack_type')
-        service = context.user_data.get('service')
-        details = ""
-        if attack_type == 'dictionary':
-            userlist = context.user_data.get('userlist')
-            passlist = context.user_data.get('passlist')
-            details = f"\n  - *Userlist* : `{userlist}`\n  - *Passlist* : `{passlist}`"
-        else:
-            username = context.user_data.get('username')
-            charset = context.user_data.get('charset')
-            min_len = context.user_data.get('min_len')
-            max_len = context.user_data.get('max_len')
-            details = f"\n  - *Username* : `{username}`\n  - *Charset* : `{charset}`\n  - *Min Length* : `{min_len}`\n  - *Max Length* : `{max_len}`"
-        if service == 'web':
-            url = context.user_data.get('url')
-            user_field = context.user_data.get('user_field')
-            pass_field = context.user_data.get('pass_field')
-            fail_string = context.user_data.get('fail_string')
-            details += f"\n  - *URL* : `{url}`\n  - *User Field* : `{user_field}`\n  - *Pass Field* : `{pass_field}`\n  - *Fail String* : `{fail_string}`"
-
-        text = f"""✅ *Prêt à lancer ?*\n\n  - *Module* : `{module.upper()}`\n  - *Cible* : `{target}`\n  - *Service* : `{service}`\n  - *Type* : `{attack_type.capitalize()}`{details}\n\nConfirmez-vous le lancement ?"""
-    elif module == 'exfil':
-        text = """📦 *Module : Exfiltration*\n\nCette action va compresser et chiffrer tous les fichiers de résultats dans le dossier `outputs`.\n\nÊtes-vous sûr de vouloir continuer ?"""
-    else:
-        text = f"""✅ *Prêt à lancer ?*\n\n  - *Module* : `{module.upper()}`\n  - *Cible* : `{target}`\n\nConfirmez-vous le lancement ?"""
+    text = f"✅ *Prêt à lancer ?*\n\n  - *Module* : `{module.upper()}`\n  - *Cible* : `{target}`\n\nConfirmez-vous le lancement ?"
 
     keyboard = [
         [InlineKeyboardButton("✅ Oui, lancer", callback_data='confirm_yes'),
@@ -289,20 +163,12 @@ async def run_module(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     target = context.user_data.get('target')
     chat_id = update.effective_chat.id
 
-    keyboard = [[InlineKeyboardButton("🛑 Arrêter l'opération", callback_data='stop_task')]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await query.edit_message_text(f"""🚀 *Lancement en cours...*\nModule : `{module.upper()}`\nCible : `{target or 'N/A'}`\n\nVeuillez patienter, cela peut prendre du temps.""", reply_markup=reply_markup, parse_mode='Markdown')
-
-    keyboard_back = [[InlineKeyboardButton("⬅️ Retour au menu principal", callback_data='main_menu')]]
-    reply_markup_back = InlineKeyboardMarkup(keyboard_back)
+    await query.edit_message_text(f"🚀 *Lancement en cours...*\nModule : `{module.upper()}`\nCible : `{target or 'N/A'}`", parse_mode='Markdown')
 
     try:
-        # S'assurer que le dossier de sortie existe
-        os.makedirs(os.path.join(os.path.dirname(__file__), '..', 'outputs'), exist_ok=True)
-
+        result = None
         if module == 'dos':
-            port = context.user_data.get('port')
+            port = int(context.user_data.get('port'))
             duration = int(context.user_data.get('duration'))
             use_tor = context.user_data.get('use_tor', False)
 
@@ -311,9 +177,9 @@ async def run_module(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             start_time = time.time()
             while (time.time() - start_time) < duration and dos.get_status()['running']:
                 status = dos.get_status()
-                text = f"""💥 *Attaque DoS en cours...* 💥\n\n  - *Cible* : `{status['target']}`\n  - *Port* : `{status['port']}`\n  - *Paquets/s* : `{status['pps']}`\n  - *Échecs/s* : `{status['failed_pps']}`\n  - *Temps écoulé* : `{int(time.time() - start_time)}s / {duration}s`\n"""
+                text = f"💥 *Attaque DoS en cours...* 💥\n\n  - *Cible* : `{status['target']}`\n  - *Port* : `{status['port']}`\n  - *Paquets/s* : `{status['pps']}`\n  - *Échecs/s* : `{status['failed_pps']}`\n  - *Temps écoulé* : `{int(time.time() - start_time)}s / {duration}s`\n"
                 try:
-                    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+                    await query.edit_message_text(text, parse_mode='Markdown')
                 except Exception:
                     pass
                 await asyncio.sleep(2)
@@ -323,132 +189,78 @@ async def run_module(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             result = f"Attaque DoS sur {target}:{port} terminée."
         else:
             def blocking_task():
+                # Réinitialiser et créer un nouveau répertoire de session pour ce scan
+                utils.reset_session_dir()
+                session_dir = utils.get_current_session_dir()
+
                 config = utils.load_config()
                 use_tor = config.get('use_tor', False)
 
-                if module == 'report':
-                    return reporting.run(target)
-                elif module == 'exfil':
-                    exfiltration.run()
-                    return None
-                elif module == 'osint':
-                    osint.session = utils.get_requests_session(force_tor=use_tor)
-                    osint.run(target)
-                    return 'osint.txt'
-                elif module == 'scan':
-                    scanner.run(target, use_tor=use_tor)
-                    return 'scan_results.txt'
-                elif module == 'web':
-                    exploit_web.session = utils.get_requests_session(force_tor=use_tor)
-                    exploit_web.run(target)
-                    return 'web_vulns.txt'
-                elif module == 'bruteforce':
-                    attack_type = context.user_data.get('attack_type')
-                    options = {
-                        'service': context.user_data.get('service'),
-                        'target': target,
-                        'port': 22, # Default SSH port, will be updated later
-                    }
-                    if attack_type == 'dictionary':
-                        options.update({
-                            'userlist': context.user_data.get('userlist'),
-                            'passlist': context.user_data.get('passlist'),
-                        })
+                if module in ['osint', 'web']:
+                    session = utils.get_requests_session(force_tor=use_tor)
+                    if module == 'osint':
+                        osint.session = session
                     else:
-                        options.update({
-                            'username': context.user_data.get('username'),
-                            'charset': context.user_data.get('charset'),
-                            'min_len': int(context.user_data.get('min_len')),
-                            'max_len': int(context.user_data.get('max_len')),
-                        })
-                    if options['service'] == 'web':
-                        options.update({
-                            'url': context.user_data.get('url'),
-                            'user_field': context.user_data.get('user_field'),
-                            'pass_field': context.user_data.get('pass_field'),
-                            'fail_string': context.user_data.get('fail_string'),
-                        })
-                    bruteforce.run(attack_type, options)
-                    return f"Attaque par force brute sur {target} terminée."
-                return None
+                        exploit_web.session = session
+
+                if module == 'osint':
+                    osint.run(target, session_dir)
+                elif module == 'scan':
+                    scanner.run(target, session_dir, use_tor=use_tor)
+                elif module == 'web':
+                    exploit_web.run(target, session_dir)
+                elif module == 'bruteforce':
+                    service = context.user_data.get('service')
+                    
+                    service_to_port = {
+                        'ssh': 22, 'ftp': 21, 'telnet': 23, 'mysql': 3306, 'postgres': 5432, 'web': 80
+                    }
+                    port = service_to_port.get(service)
+
+                    options = {
+                        'service': service,
+                        'target': target,
+                        'port': port,
+                        'userlist': context.user_data.get('userlist'),
+                        'passlist': context.user_data.get('passlist'),
+                        'threads': 50,
+                        'timeout': 5
+                    }
+                    bruteforce.run('dictionary', options)
+                
+                # Le rapport est généré à partir des fichiers dans la session active
+                return reporting.run(target, session_dir)
+
             result = await asyncio.to_thread(blocking_task)
 
-        if module == 'report' and result:
-            txt_file, pdf_file, html_file = result
+        if module != 'dos':
+            txt_file, pdf_file, _ = result
             await query.edit_message_text("✅ Tâche terminée. Envoi des rapports...")
-            for fname in [txt_file, pdf_file, html_file]:
-                if fname and os.path.exists(os.path.join('outputs', fname)):
-                    with open(os.path.join('outputs', fname), 'rb') as f:
+            
+            if txt_file and os.path.exists(os.path.join('outputs', txt_file)):
+                with open(os.path.join('outputs', txt_file), 'r', encoding='utf-8', errors='replace') as f:
+                    preview = f.read(1000)
+                await context.bot.send_message(chat_id=chat_id, text=f"📄 *Aperçu des résultats ({txt_file})*\n\n`{preview}`...", parse_mode='Markdown')
+
+            for report_file in [txt_file, pdf_file]:
+                if report_file and os.path.exists(os.path.join('outputs', report_file)):
+                    with open(os.path.join('outputs', report_file), 'rb') as f:
                         await context.bot.send_document(chat_id=chat_id, document=f)
-
-        elif module == 'exfil':
-            await query.edit_message_text("✅ Tâche terminée. Envoi de l'archive chiffrée et de la clé...")
-            key_path = os.path.join('outputs', 'encryption_key.key')
-            archive = next((os.path.join('outputs', f) for f in sorted(os.listdir('outputs'), reverse=True) if f.endswith('.zip.enc')), None)
-            if archive and os.path.exists(key_path):
-                for fpath in [archive, key_path]:
-                    with open(fpath, 'rb') as f:
-                        await context.bot.send_document(chat_id=chat_id, document=f)
-            else:
-                await context.bot.send_message(chat_id=chat_id, text="❌ Fichiers d'exfiltration non trouvés.")
-
-        elif result:
-            if isinstance(result, str) and (result.startswith('Attaque') or result.startswith('Scan')):
-                await query.edit_message_text(result)
-            else:
-                result_path = os.path.join('outputs', result)
-                if os.path.exists(result_path):
-                    await query.edit_message_text("✅ Tâche terminée. Envoi des résultats...")
-                    with open(result_path, 'r', encoding='utf-8', errors='replace') as f:
-                        content = f.read()
-                    preview = content[:3500]
-                    message = f"""📄 *Résultats pour {module.upper()}*\n\n```\n{preview}\n```"""
-                    if len(content) > 3500:
-                        message += "\n(résultats tronqués)"
-                    await context.bot.send_message(chat_id=chat_id, text=message, parse_mode='Markdown')
-
-                    with open(result_path, 'rb') as f:
-                        await context.bot.send_document(chat_id=chat_id, document=f)
-
-                    await context.bot.send_message(chat_id=chat_id, text="📄 Génération du rapport PDF...")
-                    try:
-                        _, pdf_report, _ = await asyncio.to_thread(reporting.run, target)
-                        if pdf_report and os.path.exists(os.path.join('outputs', pdf_report)):
-                            with open(os.path.join('outputs', pdf_report), 'rb') as f_pdf:
-                                await context.bot.send_document(chat_id=chat_id, document=f_pdf)
-                    except Exception as pdf_error:
-                        await context.bot.send_message(chat_id=chat_id, text=f"❌ Erreur lors de la génération du PDF : `{str(pdf_error)}`", parse_mode='Markdown')
-
+                else:
+                    await context.bot.send_message(chat_id=chat_id, text=f"❌ Erreur : Fichier de rapport {report_file} non trouvé.")
         else:
-            await query.edit_message_text("✅ Tâche terminée, mais aucun résultat exploitable n'a été trouvé.")
-        
-        await context.bot.send_message(chat_id=chat_id, text="Vous pouvez maintenant retourner au menu.", reply_markup=reply_markup_back)
+             await query.edit_message_text(result)
 
-    except requests.exceptions.ProxyError as e:
-        error_message = "❌ Erreur de proxy TOR. Le service est-il bien lancé sur le port 9150 ?"
-        utils.log_message('-', f"[BOT ERROR] {error_message} - {e}")
-        await query.edit_message_text(error_message, reply_markup=reply_markup_back)
-    except requests.exceptions.ConnectionError as e:
-        error_message = f"❌ Erreur de connexion. Impossible d'atteindre la cible `{target}`. Est-elle en ligne ?"
-        utils.log_message('-', f"[BOT ERROR] {error_message} - {e}")
-        await query.edit_message_text(error_message, parse_mode='Markdown', reply_markup=reply_markup_back)
-    except socket.gaierror:
-        error_message = f"❌ Erreur : Le nom d'hôte `{target}` est introuvable. Vérifiez l'orthographe."
-        utils.log_message('-', f"[BOT ERROR] {error_message}")
-        await query.edit_message_text(error_message, parse_mode='Markdown', reply_markup=reply_markup_back)
     except Exception as e:
-        error_message = f"❌ Une erreur inattendue est survenue lors de l'exécution du module `{module}`."
-        utils.log_message('-', f"[BOT ERROR] {error_message} - {e}")
-        await query.edit_message_text(f"{error_message}\nConsultez les logs du serveur pour les détails.", parse_mode='Markdown', reply_markup=reply_markup_back)
-    finally:
-        context.user_data.clear()
-        return SELECTING_ACTION
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Erreur : {e}")
+    
+    return await back_to_main_menu(update, context)
 
 # --- GESTION DE TOR ---
 async def tor_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    config = load_config()
+    config = utils.load_config()
     status = "✅ Activé" if config.get('use_tor') else "❌ Désactivé"
     keyboard = [
         [InlineKeyboardButton(f"Basculer TOR (actuel: {status})", callback_data='toggle_tor')],
@@ -461,27 +273,135 @@ async def tor_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def toggle_tor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    config = load_config()
+    config = utils.load_config()
     config['use_tor'] = not config.get('use_tor', False)
-    save_config(config)
+    utils.save_config(config)
     await query.message.reply_text(f"TOR est maintenant {'activé' if config['use_tor'] else 'désactivé'}.")
     return await tor_menu(update, context)
 
-# --- RETOUR & ANNULATION ---
-async def back_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    return await start(update, context)
+# --- GESTION DE LA STÉGANOGRAPHIE ---
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def stegano_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
-    if query:
-        await query.answer()
-        await query.edit_message_text("Opération annulée.")
+    await query.answer()
+    keyboard = [
+        [InlineKeyboardButton(" caché un fichier", callback_data='stegano_hide'),
+         InlineKeyboardButton("🤫 Révéler un fichier", callback_data='stegano_reveal')],
+        [InlineKeyboardButton("⬅️ Retour", callback_data='main_menu')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await query.edit_message_text("🖼️ *Menu Stéganographie*\n\nQue souhaitez-vous faire ?", reply_markup=reply_markup, parse_mode='Markdown')
+    return SELECTING_STEGANO_ACTION
+
+async def stegano_ask_for_cover_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    context.user_data['stegano_state'] = AWAITING_STEGANO_IMAGE_HIDE
+    await query.edit_message_text("‼️ *IMPORTANT* ‼️\n\nVeuillez envoyer l'image de couverture EN TANT QUE **FICHIER** (non compressé). N'utilisez PAS l'option 'Photo'.")
+    return AWAITING_STEGANO_IMAGE_HIDE
+
+async def stegano_ask_for_reveal_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    context.user_data['stegano_state'] = AWAITING_STEGANO_IMAGE_REVEAL
+    await query.edit_message_text("‼️ *IMPORTANT* ‼️\n\nVeuillez envoyer l'image contenant le secret EN TANT QUE **FICHIER** (non compressé). N'utilisez PAS l'option 'Photo'.")
+    return AWAITING_STEGANO_IMAGE_REVEAL
+
+async def stegano_handle_image_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    message = update.message
+    state = context.user_data.get('stegano_state')
+    keyboard_back = [[InlineKeyboardButton("⬅️ Retour au menu principal", callback_data='main_menu')]]
+    reply_markup_back = InlineKeyboardMarkup(keyboard_back)
+
+    if not message.document or not message.document.mime_type or not message.document.mime_type.startswith('image/') :
+        await message.reply_text("❌ Erreur : Veuillez envoyer une image en tant que **Document**.", reply_markup=reply_markup_back, parse_mode='Markdown')
+        return state
+
+    file_to_process = message.document
+    file_id = file_to_process.file_id
+    file = await context.bot.get_file(file_id)
+    
+    outputs_dir = os.path.join(os.path.dirname(__file__), '..', 'outputs')
+    os.makedirs(outputs_dir, exist_ok=True)
+    
+    temp_file_path = os.path.join(outputs_dir, file_to_process.file_name)
+    await file.download_to_drive(temp_file_path)
+
+    if state == AWAITING_STEGANO_IMAGE_HIDE:
+        context.user_data['cover_image'] = temp_file_path
+        await message.reply_text("✅ Image de couverture reçue. Envoyez maintenant le fichier secret (en tant que document).")
+        return AWAITING_STEGANO_SECRET_FILE
+
+    elif state == AWAITING_STEGANO_IMAGE_REVEAL:
+        await message.reply_text("Image reçue. Traitement en cours...")
+        
+        output_filename = "revealed_secret.dat"
+        output_path = os.path.join(outputs_dir, output_filename)
+
+        result = await asyncio.to_thread(crypto_tools.stegano_reveal_file, temp_file_path, output_path)
+
+        if "Succès" in result:
+            await message.reply_text("Secret trouvé ! Voici le fichier extrait :")
+            with open(output_path, 'rb') as f:
+                await context.bot.send_document(chat_id=message.chat_id, document=f)
+        else:
+            await message.reply_text(f"Erreur ou secret non trouvé : {result}")
+
+        if os.path.exists(temp_file_path): os.remove(temp_file_path)
+        if os.path.exists(output_path): os.remove(output_path)
+        await message.reply_text("Opération terminée.", reply_markup=reply_markup_back)
+        context.user_data.clear()
+        return ConversationHandler.END
+
+async def stegano_handle_secret_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    message = update.message
+    chat_id = message.chat_id
+    keyboard_back = [[InlineKeyboardButton("⬅️ Retour au menu principal", callback_data='main_menu')]]
+    reply_markup_back = InlineKeyboardMarkup(keyboard_back)
+
+    if not message.document:
+        await message.reply_text("❌ Erreur : Veuillez envoyer le secret en tant que **Document**.", reply_markup=reply_markup_back, parse_mode='Markdown')
+        return AWAITING_STEGANO_SECRET_FILE
+
+    secret_file_to_process = message.document
+    file_id = secret_file_to_process.file_id
+    file = await context.bot.get_file(file_id)
+    
+    outputs_dir = os.path.join(os.path.dirname(__file__), '..', 'outputs')
+    os.makedirs(outputs_dir, exist_ok=True)
+    
+    secret_file_path = os.path.join(outputs_dir, secret_file_to_process.file_name)
+    await file.download_to_drive(secret_file_path)
+
+    cover_image_path = context.user_data.get('cover_image')
+    
+    if not cover_image_path:
+        await message.reply_text("Erreur : l'image de couverture est manquante. Veuillez recommencer.", reply_markup=reply_markup_back)
+        return await back_to_main_menu(update, context)
+
+    await message.reply_text("Fichiers reçus. Traitement en cours...")
+    
+    output_filename = "stegano_" + os.path.basename(cover_image_path)
+    output_path = os.path.join(outputs_dir, output_filename)
+
+    result = await asyncio.to_thread(crypto_tools.stegano_hide_file, cover_image_path, secret_file_path, output_path)
+
+    if "Succès" in result:
+        await message.reply_text("Opération terminée. Voici votre image avec le fichier caché :")
+        with open(output_path, 'rb') as f:
+            await context.bot.send_document(chat_id=chat_id, document=f)
     else:
-        await update.message.reply_text("Opération annulée.")
+        await message.reply_text(f"Erreur lors du traitement : {result}")
+
+    if os.path.exists(cover_image_path): os.remove(cover_image_path)
+    if os.path.exists(secret_file_path): os.remove(secret_file_path)
+    if os.path.exists(output_path): os.remove(output_path)
+    await message.reply_text("Opération terminée.", reply_markup=reply_markup_back)
     context.user_data.clear()
-    return await start(update, context)
+    return ConversationHandler.END
 
 # --- LANCEMENT PRINCIPAL ---
+
 def run():
     TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
     if not TOKEN or TOKEN == "VOTRE_TOKEN_DE_BOT_TELEGRAM":
@@ -496,6 +416,7 @@ def run():
         states={
             SELECTING_ACTION: [
                 CallbackQueryHandler(ask_for_target, pattern='^(osint|scan|web|report|exfil|dos|bruteforce)$'),
+                CallbackQueryHandler(stegano_menu, pattern='^stegano$'),
                 CallbackQueryHandler(tor_menu, pattern='^tor_menu$'),
                 CallbackQueryHandler(toggle_tor, pattern='^toggle_tor$'),
                 CallbackQueryHandler(back_to_main_menu, pattern='^main_menu$'),
@@ -503,14 +424,15 @@ def run():
             AWAITING_TARGET: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_target_input)
             ],
+            AWAITING_CONFIRMATION: [
+                CallbackQueryHandler(run_module, pattern='^confirm_yes$'),
+                CallbackQueryHandler(cancel, pattern='^confirm_no$')
+            ],
             AWAITING_DOS_PORT: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_dos_port_input)
             ],
             AWAITING_DOS_DURATION: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_dos_duration_input)
-            ],
-            AWAITING_DOS_TOR: [
-                CallbackQueryHandler(handle_dos_tor_choice)
             ],
             AWAITING_BRUTEFORCE_SERVICE: [
                 CallbackQueryHandler(handle_bruteforce_service_input)
@@ -521,42 +443,22 @@ def run():
             AWAITING_BRUTEFORCE_PASSLIST: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bruteforce_passlist_input)
             ],
-            AWAITING_BRUTEFORCE_TYPE: [
-                CallbackQueryHandler(handle_bruteforce_type_input)
+            # Stegano states
+            SELECTING_STEGANO_ACTION: [
+                CallbackQueryHandler(stegano_ask_for_cover_image, pattern='^stegano_hide$'),
+                CallbackQueryHandler(stegano_ask_for_reveal_image, pattern='^stegano_reveal$'),
             ],
-            AWAITING_BRUTEFORCE_USERNAME: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bruteforce_username_input)
+            AWAITING_STEGANO_IMAGE_HIDE: [
+                MessageHandler(filters.Document.IMAGE, stegano_handle_image_file)
             ],
-            AWAITING_BRUTEFORCE_CHARSET: [
-                CallbackQueryHandler(handle_bruteforce_charset_input)
+            AWAITING_STEGANO_SECRET_FILE: [
+                MessageHandler(filters.Document.ALL, stegano_handle_secret_file)
             ],
-            AWAITING_BRUTEFORCE_MIN_LEN: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bruteforce_min_len_input)
-            ],
-            AWAITING_BRUTEFORCE_MAX_LEN: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bruteforce_max_len_input)
-            ],
-            AWAITING_BRUTEFORCE_URL: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bruteforce_url_input)
-            ],
-            AWAITING_BRUTEFORCE_USER_FIELD: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bruteforce_user_field_input)
-            ],
-            AWAITING_BRUTEFORCE_PASS_FIELD: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bruteforce_pass_field_input)
-            ],
-            AWAITING_BRUTEFORCE_FAIL_STRING: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bruteforce_fail_string_input)
-            ],
-            AWAITING_CONFIRMATION: [
-                CallbackQueryHandler(run_module, pattern='^confirm_yes$'),
-                CallbackQueryHandler(cancel, pattern='^confirm_no$')
-            ],
-            AWAITING_STOP: [
-                CallbackQueryHandler(stop_task, pattern='^stop_task$')
+            AWAITING_STEGANO_IMAGE_REVEAL: [
+                MessageHandler(filters.Document.IMAGE, stegano_handle_image_file)
             ],
         },
-        fallbacks=[CommandHandler('cancel', cancel)],
+        fallbacks=[CommandHandler('cancel', cancel), CallbackQueryHandler(back_to_main_menu, pattern='^main_menu$')],
         per_message=False,
         allow_reentry=True
     )
@@ -566,4 +468,9 @@ def run():
     app.run_polling()
 
 if __name__ == '__main__':
+    # Correction pour l'exécution directe du bot
+    if os.path.basename(os.getcwd()) == 'modules':
+        os.chdir('..')
+        sys.path.insert(0, os.getcwd())
+    from modules import utils
     run()
