@@ -212,7 +212,7 @@ Si vous développez un nouveau programme et que vous souhaitez qu'il soit de la 
 
 Pour ce faire, joignez les avis suivants au programme. Il est plus sûr de les attacher au début de chaque fichier source pour transmettre le plus efficacement l'exclusion de garantie ; et chaque fichier doit avoir au moins la ligne « copyright » et un pointeur vers l'endroit où se trouve l'avis complet.
 
-<une ligne pour donner le nom du programme et une brève idée de ce qu'il fait.>
+
 Copyright (C) <2025> <Hermann KEKE>
 
 Ce programme est un logiciel libre ; vous pouvez le redistribuer et/ou le modifier selon les termes de la Licence publique générale GNU telle que publiée par la Free Software Foundation ; soit la version 3 de la Licence, soit (à votre choix) toute version ultérieure.
@@ -225,7 +225,7 @@ Ajoutez également des informations sur la façon de vous contacter par courrier
 
 Si le programme fait une interaction terminale, faites-le sortir un bref avis comme celui-ci au démarrage dans un mode interactif :
 
-<programme> Copyright (C) <2025> <Hermann KEKE>
+       Copyright (C) 2025 Hermann KEKE
 Ce programme est livré avec ABSOLUMENT AUCUNE GARANTIE ; pour plus de détails, tapez « show w ». C'est un logiciel libre, et vous êtes invités à le redistribuer sous certaines conditions ; tapez « show c » pour plus de détails.
 
 Les commandes hypothétiques « show w » et « show c » devraient afficher les parties appropriées de la Licence publique générale. Bien sûr, les commandes de votre programme peuvent être différentes ; pour une interface graphique, vous utiliseriez une « boîte à propos ».
