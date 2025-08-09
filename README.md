@@ -53,7 +53,7 @@ Cet outil est conçu à des fins **éducatives** et pour les **professionnels de
 
 ## 🚀 Installation
 
-*  **Vous mettre en adminitarteur avant**
+*  **Vous mettre d'abord en adminitarteur**
 
 1.  **Clonez le dépôt :**
     ```bash
