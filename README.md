@@ -76,7 +76,7 @@ Cet outil est conçu à des fins **éducatives** et pour les **professionnels de
 4.  **Configurez les clés API :**
     *   Copiez le fichier `.env.example` et renommez-le en `.env`.
     *   Ouvrez le fichier `.env` et remplissez les clés API requises (Shodan, AbuseIPDB, Telegram).
-
+5.  **Créer un dossier nommé "outputs" dans la racine du projet :**
 ---
 
 ## 🕹️ Guide d'Utilisation Rapide
