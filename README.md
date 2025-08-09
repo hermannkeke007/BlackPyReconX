@@ -21,7 +21,7 @@ Cet outil est conçu à des fins **éducatives** et pour les **professionnels de
 ---
 
 ## ✨ Fonctionnalités Principales
-
+*  **Vous mettre en adminitarteur avant**
 *   **Interfaces Multiples :**
     *   **CLI Puissante :** Pour le scripting, l'automatisation et un contrôle granulaire.
     *   **Interface Web Conviviale :** Un tableau de bord pour piloter les scans, visualiser les résultats et gérer le framework.
