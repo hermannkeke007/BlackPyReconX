@@ -88,16 +88,18 @@ def run_sniffer(iface, filter=None, count=0):
         'iface': iface,
         'filter': filter,
         'prn': packet_callback,
-        'count': 10
+        'store': False, # Ne pas stocker les paquets en mémoire inutilement
+        'stop_filter': lambda p: not sniffer_state["running"]
     }
+    if count > 0:
+        kwargs['count'] = count
 
-    while sniffer_state["running"]:
-        try:
-            sniff(**kwargs)
-            time.sleep(1)
-        except Exception as e:
-            console.print(f"[bold red]Erreur dans le thread du sniffer: {e}[/bold red]")
-            sniffer_state["running"] = False
+    try:
+        sniff(**kwargs)
+    except Exception as e:
+        console.print(f"[bold red]Erreur dans le thread du sniffer: {e}[/bold red]")
+    finally:
+        sniffer_state["running"] = False
 
 def start(iface=None, filter=None, count=0, output=None):
     """Démarre la capture de paquets."""
@@ -122,25 +124,32 @@ def start(iface=None, filter=None, count=0, output=None):
     
     return {"message": f"Capture démarrée sur l'interface {effective_iface}."}
 
-def stop():
+def stop(session_dir=None):
     """Arrête la capture de paquets et sauvegarde les résultats."""
     global sniffer_state
     if not sniffer_state["running"]:
-        return {"error": "Aucune capture en cours."}
-
-    sniffer_state["running"] = False
-    if sniffer_state["thread"]:
-        sniffer_state["thread"].join(timeout=2)
+        # Tenter de joindre un thread qui pourrait s'être terminé tout seul
+        if sniffer_state["thread"] and sniffer_state["thread"].is_alive():
+            sniffer_state["thread"].join(timeout=1)
+    else:
+        sniffer_state["running"] = False
+        if sniffer_state["thread"]:
+            sniffer_state["thread"].join(timeout=2)
     
     if sniffer_state["packets"]:
-        timestamp = time.strftime("%Y%m%d-%H%M%S")
-        txt_file = f"outputs/sniff_{timestamp}.txt"
+        # Si aucun répertoire de session n'est fourni, on sauvegarde dans 'outputs' par défaut
+        if session_dir:
+            output_file = os.path.join(session_dir, "sniffer_results.txt")
+        else:
+            # Comportement de repli pour garantir que les données ne sont pas perdues
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            output_file = f"outputs/sniff_{timestamp}.txt"
         
-        with open(txt_file, "w") as f:
+        with open(output_file, "w", encoding='utf-8') as f:
             for packet_summary in sniffer_state["packets"]:
                 f.write(packet_summary + "\n")
         
-        return {"message": f"Capture arrêtée. Rapport sauvegardé : {txt_file}"}
+        return {"message": f"Capture arrêtée. Rapport sauvegardé : {output_file}"}
     
     return {"message": "Capture arrêtée. Aucun paquet capturé."}
 

@@ -13,4 +13,7 @@ paramiko
 mysql-connector-python
 psycopg2-binary
 rich
-scapy 
+scapy
+questionary
+telnetlib3
+tqdm

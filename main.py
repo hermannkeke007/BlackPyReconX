@@ -233,32 +233,34 @@ def main():
 
     if args.sniff:
         utils.log_message('*', "Lancement du module Sniffer...")
+        report_needed = True # Marquer qu'un rapport est nécessaire
         result = sniffer.start(iface=args.iface, filter=args.filter, count=args.count, output=args.output)
         if result.get('error'):
             utils.log_message('-', result['error'])
             sys.exit(1)
         
         utils.log_message('+', result['message'])
-        utils.log_message('*', "Appuyez sur Ctrl+C pour arrêter la capture.")
-
-        try:
-            while True:
-                status = sniffer.get_status()
-                if not status['running'] and args.count > 0:
-                    break # Sortir si le nombre de paquets est atteint
-                
-                for packet in status['packets']:
-                    console.print(f"  [green]Paquet capturé:[//] {packet}")
+        
+        # Si count est 0, on attend une interruption manuelle, sinon on attend la fin
+        if args.count == 0:
+            utils.log_message('*', "Capture en cours... Appuyez sur Ctrl+C pour arrêter.")
+            try:
+                # Boucle pour maintenir le script en vie pendant que le thread du sniffer tourne
+                while sniffer.get_status()['running']:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                utils.log_message('!', "\nInterruption manuelle détectée. Arrêt de la capture...")
+        else:
+            utils.log_message('*', f"Capture de {args.count} paquets en cours...")
+            while sniffer.get_status()['running']:
                 time.sleep(1)
-        except KeyboardInterrupt:
-            utils.log_message('!', "\nInterruption manuelle détectée. Arrêt de la capture...")
-        finally:
-            stop_result = sniffer.stop()
-            if 'message' in stop_result:
-                utils.log_message('+', stop_result['message'])
-            elif 'error' in stop_result:
-                utils.log_message('-', stop_result['error'])
-            sys.exit(0)
+
+        # On arrête le sniffer dans tous les cas (Ctrl+C ou fin du count)
+        stop_result = sniffer.stop(session_dir=session_dir)
+        if 'message' in stop_result:
+            utils.log_message('+', stop_result['message'])
+        elif 'error' in stop_result:
+            utils.log_message('-', stop_result['error'])
 
     # Génération du rapport si nécessaire ou demandé
     if report_needed or args.report:

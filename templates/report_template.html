@@ -41,7 +41,16 @@
         <pre>{{ recommandations }}</pre>
 
         <h2>Annexes (Logs Bruts)</h2>
-        <pre>{{ annexes }}</pre>
+        <h3>Résultats OSINT</h3>
+        <pre>{{ osint_results }}</pre>
+
+        <h3>Résultats Scan Réseau</h3>
+        <pre>{{ scan_results }}</pre>
+
+        {% if sniffer_results and "n'a pas été trouvé" not in sniffer_results %}
+        <h3>Résultats Capture de Paquets</h3>
+        <pre>{{ sniffer_results }}</pre>
+        {% endif %}
 
         <div class="footer">
             <p>Rapport préparé par : {{ engineer_name or 'N/A' }} | {{ engineer_email or 'N/A' }}</p>

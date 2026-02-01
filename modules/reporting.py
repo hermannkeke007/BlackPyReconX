@@ -194,6 +194,9 @@ def generate_professional_report(data):
 
     # --- 5. Annexes ---
     annexes = f"**Résultats OSINT :**\n{data['osint_results']}\n\n**Résultats Scan Réseau :**\n{data['scan_results']}"
+    if 'sniffer_results' in data and data['sniffer_results'].strip() and "n'a pas été trouvé" not in data['sniffer_results']:
+        annexes += f"\n\n**Résultats Capture de Paquets :**\n{data['sniffer_results']}"
+
 
     return {
         "resume_executif": resume_executif,
@@ -230,6 +233,7 @@ def run(target, session_dir):
         'osint_results': read_output_file('osint.txt', session_dir),
         'scan_results': read_output_file('scan_results.txt', session_dir),
         'web_vulns_results': read_output_file('web_vulns.txt', session_dir),
+        'sniffer_results': read_output_file('sniffer_results.txt', session_dir),
         'keylog_status': "Fichier de log trouvé." if os.path.exists(os.path.join(session_dir, 'keylogs', 'keylog.txt')) else "Aucun log trouvé.",
         'screenshot_status': "Capture trouvée." if os.path.exists(os.path.join(session_dir, 'screenshots', 'screenshot.png')) else "Aucune capture trouvée.",
         'shell_status': "Tentative de connexion effectuée (vérifier manuellement).",
