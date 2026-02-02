@@ -26,6 +26,10 @@ import telnetlib3
 import socket
 from tqdm import tqdm
 from . import utils
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG) # Ensure debug messages are processed
 
 # --- Global State ---
 bruteforce_state = {
@@ -94,14 +98,18 @@ SUPPORTED_SERVICES = {
 
 def _bruteforce_worker(q, pbar, service_func, target, port, username, timeout, verbose):
     """Picks a password from the queue and tests it against a single username."""
+    thread_name = threading.current_thread().name
+    logger.debug(f"[{thread_name}] Worker started.")
     while not bruteforce_state["stop_event"].is_set():
         try:
             password = q.get_nowait()
         except queue.Empty:
+            logger.debug(f"[{thread_name}] Queue empty, worker exiting.")
             return
 
         if verbose:
             tqdm.write(f"[VERBOSE] Testing: {username}:{password}")
+        logger.debug(f"[{thread_name}] Testing {username}:{password}")
 
         try:
             if service_func(target, port, username, password, timeout):
@@ -109,20 +117,28 @@ def _bruteforce_worker(q, pbar, service_func, target, port, username, timeout, v
                     bruteforce_state["found_credentials"] = (username, password)
                 bruteforce_state["stop_event"].set()
                 tqdm.write(f"\n[+] SUCCESS! Credentials found: {username}:{password}")
+                logger.debug(f"[{thread_name}] Credentials found: {username}:{password}. Setting stop_event.")
+        except Exception as e:
+            logger.debug(f"[{thread_name}] Error testing {username}:{password}: {e}")
         finally:
             pbar.update(1)
             q.task_done()
+    logger.debug(f"[{thread_name}] Worker stopping due to stop_event.")
 
 def _dictionary_worker(q, pbar, service_func, target, port, timeout, verbose):
     """Picks (username, password) from the queue and tests them."""
+    thread_name = threading.current_thread().name
+    logger.debug(f"[{thread_name}] Worker started.")
     while not bruteforce_state["stop_event"].is_set():
         try:
             username, password = q.get_nowait()
         except queue.Empty:
+            logger.debug(f"[{thread_name}] Queue empty, worker exiting.")
             return
 
         if verbose:
             tqdm.write(f"[VERBOSE] Testing: {username}:{password}")
+        logger.debug(f"[{thread_name}] Testing {username}:{password}")
 
         try:
             if service_func(target, port, username, password, timeout):
@@ -130,9 +146,13 @@ def _dictionary_worker(q, pbar, service_func, target, port, timeout, verbose):
                     bruteforce_state["found_credentials"] = (username, password)
                 bruteforce_state["stop_event"].set()
                 tqdm.write(f"\n[+] SUCCESS! Credentials found: {username}:{password}")
+                logger.debug(f"[{thread_name}] Credentials found: {username}:{password}. Setting stop_event.")
+        except Exception as e:
+            logger.debug(f"[{thread_name}] Error testing {username}:{password}: {e}")
         finally:
             pbar.update(1)
             q.task_done()
+    logger.debug(f"[{thread_name}] Worker stopping due to stop_event.")
 
 # --- Password Generation ---
 
@@ -158,9 +178,12 @@ def generate_passwords(charset, min_len, max_len):
 
 def start_bruteforce(attack_type, options):
     global bruteforce_state
+    logger.debug(f"[start_bruteforce] Called with attack_type: {attack_type}, options: {options}")
     with bruteforce_state["lock"]:
+        logger.debug(f"[start_bruteforce] Inside lock. bruteforce_state['running']: {bruteforce_state['running']}")
         if bruteforce_state["running"]:
             utils.log_message('!', "Une attaque par force brute est déjà en cours.")
+            logger.debug("[start_bruteforce] Attack already running, returning.")
             return
 
         utils.log_message('*', f"Démarrage de l'attaque par force brute sur {options['target']}:{options['port']}")
@@ -173,6 +196,7 @@ def start_bruteforce(attack_type, options):
         bruteforce_state["stop_event"].clear()
         bruteforce_state["credential_queue"] = queue.Queue()
         bruteforce_state["total_combinations"] = 0
+        logger.debug(f"[start_bruteforce] State initialized: {bruteforce_state['running']=}, {bruteforce_state['stop_event'].is_set()=}")
 
     service_func = SUPPORTED_SERVICES.get(options['service'])
     if not service_func:
@@ -219,12 +243,15 @@ def start_bruteforce(attack_type, options):
 
 def stop_bruteforce():
     global bruteforce_state
+    logger.debug(f"[stop_bruteforce] Called. bruteforce_state['running']: {bruteforce_state['running']}")
     with bruteforce_state["lock"]:
         if not bruteforce_state["running"]:
+            logger.debug("[stop_bruteforce] Attack not running, returning.")
             return
         utils.log_message('+', "Arrêt de l'attaque par force brute.")
         bruteforce_state["stop_event"].set()
         bruteforce_state["running"] = False
+        logger.debug(f"[stop_bruteforce] State updated: {bruteforce_state['running']=}, {bruteforce_state['stop_event'].is_set()=}")
         # Clear the queue to unblock threads
         while not bruteforce_state["credential_queue"].empty():
             try:
@@ -232,6 +259,7 @@ def stop_bruteforce():
                 bruteforce_state["credential_queue"].task_done()
             except queue.Empty:
                 break
+        logger.debug("[stop_bruteforce] Credential queue cleared.")
 
 def get_status():
     with bruteforce_state["lock"]:

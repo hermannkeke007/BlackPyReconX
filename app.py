@@ -22,6 +22,7 @@ import json
 import re
 import datetime
 import logging
+import threading # Added for running brute-force in a separate thread
 import time
 
 # Configuration de la journalisation
@@ -34,8 +35,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'modules'))
 # Importer les modules de BlackPyReconX
 from modules import osint, scanner, exploit_web, reporting, exfiltration, utils, dos, bruteforce, sniffer, crypto_tools
 
+# --- Global State for Brute-force Thread Management ---
+bruteforce_thread = None 
 
-app = Flask(__name__)
+
+app = Flask(__name__, static_url_path='/static', static_folder='static')
 
 OUTPUTS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), 'outputs'))
 
@@ -47,31 +51,41 @@ def add_header(response):
     response.headers['Expires'] = '0'
     return response
 
-@app.route('/favicon.svg')
-def favicon():
-    return send_from_directory(os.path.join(app.root_path, 'data', 'assets'), 'favicon.svg', mimetype='image/svg+xml')
-
-# Variable globale pour l'état de TOR
-USE_TOR = False
-
-# --- ROUTES DE L'INTERFACE WEB ---
+# --- ROUTES DE L'INTERFACE WEB (Nouvelle Structure) ---
 
 @app.route('/')
 def index():
-    """Affiche la page d'accueil avec des panneaux de résultats vierges."""
-    results = {
-        'osint': 'Les résultats OSINT apparaîtront ici.',
-        'scan': 'Les résultats du scan réseau apparaîtront ici.',
-        'web': "Les résultats de l'analyse web apparaîtront ici."
-    }
-    tor_ip = None
-    try:
-        with open('status.json', 'r') as f:
-            status_data = json.load(f)
-            tor_ip = status_data.get('tor_ip')
-    except (FileNotFoundError, json.JSONDecodeError):
-        pass
-    return render_template('index.html', results=results, tor_ip=tor_ip)
+    """Affiche le tableau de bord principal."""
+    return render_template('index.html')
+
+@app.route('/recon')
+def recon():
+    """Affiche la page de Reconnaissance."""
+    return render_template('recon.html')
+
+@app.route('/web')
+def web():
+    """Affiche la page d'Analyse Web."""
+    return render_template('web.html')
+
+@app.route('/exploit')
+def exploit():
+    """Affiche la page d'Exploitation."""
+    return render_template('exploit.html')
+
+@app.route('/utils')
+def utils_page():
+    """Affiche la page des Utilitaires."""
+    return render_template('utils_page.html')
+
+@app.route('/reports')
+def reports():
+    """Affiche la page de gestion des rapports."""
+    # Cette page pourrait être plus complexe, mais pour l'instant, elle n'a besoin que du template.
+    # Le chargement des rapports se fait via l'API '/api/reports' appelée par le JS.
+    return render_template('reports.html')
+
+# --- ROUTES API (Anciennes routes qui deviennent des points d'API) ---
 
 @app.route('/run_module', methods=['POST'])
 def run_module():
@@ -167,52 +181,7 @@ def run_module():
             dos.run(target, port, duration)
             return jsonify({'output': f"Attaque DoS sur {target}:{port} terminée après {duration} secondes."})
 
-        elif module_name == 'bruteforce':
-            attack_type = data.get('attack_type')
-            service = data.get('service')
 
-            # Mapper le service au port
-            service_to_port = {
-                'ssh': 22, 'ftp': 21, 'telnet': 23, 'mysql': 3306, 'postgres': 5432, 'web': 80 # Port par défaut pour web
-            }
-            port = service_to_port.get(service)
-
-            if not port:
-                return jsonify({'error': f'Service non supporté: {service}'}), 400
-
-            options = {
-                'service': service,
-                'target': target,
-                'port': port,
-            }
-
-            if attack_type == 'dictionary':
-                options.update({
-                    'userlist': data.get('userlist'),
-                    'passlist': data.get('passlist'),
-                    'password': data.get('password'),
-                })
-                if service == 'web':
-                    options.update({
-                        'url': data.get('url'),
-                        'user_field': data.get('user_field'),
-                        'pass_field': data.get('pass_field'),
-                        'fail_string': data.get('fail_string'),
-                    })
-
-            elif attack_type == 'bruteforce':
-                options.update({
-                    'username': data.get('username'),
-                    'charset': data.get('charset'),
-                    'min_len': data.get('min_len'),
-                    'max_len': data.get('max_len'),
-                })
-            
-            found = bruteforce.run(attack_type, options)
-            if found:
-                return jsonify({'output': f"Identifiants trouvés : {found[0]}:{found[1]}"})
-            else:
-                return jsonify({'output': "Aucun identifiant trouvé."})
         
         else:
             return jsonify({'error': 'Module inconnu.'}), 400
@@ -249,6 +218,76 @@ def stop_dos():
         dos.stop_attack()
         return jsonify({'message': 'Attaque DoS arrêtée.'})
     except Exception as e:
+        return jsonify({'error': f"Erreur lors de l\'arrêt de l\'attaque: {e}"}), 500
+
+# --- ROUTES POUR L\'ATTAQUE BRUTE-FORCE ---
+def _run_bruteforce_in_thread(attack_type, options):
+    """Wrapper pour exécuter bruteforce.start_bruteforce dans un thread."""
+    global bruteforce_thread
+    app.logger.debug(f"[_run_bruteforce_in_thread] Thread started. Name: {threading.current_thread().name}")
+    try:
+        bruteforce.start_bruteforce(attack_type, options)
+        # Laisser le thread en vie tant que l'attaque tourne
+        while bruteforce.bruteforce_state["running"]:
+            app.logger.debug(f"[_run_bruteforce_in_thread] bruteforce_state['running'] is True. Sleeping...")
+            time.sleep(0.5) 
+    except Exception as e:
+        app.logger.error(f"[_run_bruteforce_in_thread] Error in brute-force thread: {e}", exc_info=True)
+    finally:
+        app.logger.debug(f"[_run_bruteforce_in_thread] Finally block entered. bruteforce_state['running']: {bruteforce.bruteforce_state['running']}")
+        # S'assurer que l'état est bien nettoyé si le thread se termine
+        if bruteforce.bruteforce_state["running"]: # Only stop if it's still marked as running
+            app.logger.debug("[_run_bruteforce_in_thread] Calling bruteforce.stop_bruteforce() from finally block.")
+            bruteforce.stop_bruteforce() # Assure un arrêt propre si une erreur survient
+        else:
+            app.logger.debug("[_run_bruteforce_in_thread] bruteforce_state['running'] is False, no need to call stop_bruteforce.")
+        
+        app.logger.debug(f"[_run_bruteforce_in_thread] bruteforce_thread before clearing: {bruteforce_thread}")
+        bruteforce_thread = None # Libérer le thread une fois terminé
+        app.logger.debug(f"[_run_bruteforce_in_thread] bruteforce_thread after clearing: {bruteforce_thread}")
+
+@app.route('/bruteforce/start', methods=['POST'])
+def start_bruteforce_web():
+    global bruteforce_thread
+    app.logger.debug(f"start_bruteforce_web called. bruteforce_thread: {bruteforce_thread}, is_alive: {bruteforce_thread.is_alive() if bruteforce_thread else 'N/A'}")
+    if bruteforce_thread and bruteforce_thread.is_alive():
+        app.logger.debug("Brute-force already running (from bruteforce_thread check).")
+        return jsonify({'error': 'Une attaque par force brute est déjà en cours.'}), 409
+
+    data = request.get_json()
+    attack_type = data.get('attack_type')
+    options = data.get('options')
+
+    if not attack_type or not options:
+        app.logger.debug("Missing attack_type or options.")
+        return jsonify({'error': 'Les paramètres de l\'attaque brute-force sont manquants.'}), 400
+    
+    # Validation minimale pour la cible
+    if not options.get('target') and options.get('service') != 'web': # For web, target is the URL, not the target parameter
+        app.logger.debug("Missing target for non-web service.")
+        return jsonify({'error': 'La cible est obligatoire pour la plupart des services.'}), 400
+
+    bruteforce_thread = threading.Thread(target=_run_bruteforce_in_thread, args=(attack_type, options), daemon=True)
+    bruteforce_thread.start()
+    app.logger.debug(f"Brute-force thread started. Thread: {bruteforce_thread}")
+
+    return jsonify({'message': 'Attaque par force brute démarrée.'})
+
+@app.route('/bruteforce/status', methods=['GET'])
+def bruteforce_status():
+    status = bruteforce.get_status()
+    app.logger.debug(f"bruteforce_status called. Current status: {status}")
+    return jsonify(status)
+
+@app.route('/bruteforce/stop', methods=['POST'])
+def stop_bruteforce_web():
+    app.logger.debug("stop_bruteforce_web called.")
+    try:
+        bruteforce.stop_bruteforce()
+        app.logger.debug("bruteforce.stop_bruteforce() called.")
+        return jsonify({'message': 'Attaque par force brute arrêtée.'})
+    except Exception as e:
+        app.logger.error(f"Erreur lors de l\'arrêt de l\'attaque par force brute: {e}", exc_info=True)
         return jsonify({'error': f"Erreur lors de l\'arrêt de l\'attaque: {e}"}), 500
 
 # --- ROUTES POUR LA GESTION DES SERVICES ET TÉLÉCHARGEMENTS ---
@@ -301,7 +340,8 @@ def toggle_tor():
 # --- ROUTE POUR LA CONFIGURATION DES RAPPORTS ---
 
 REPORT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'data', 'report_config.json')
-UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'data', 'assets')
+UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'static', 'assets') # Modified path
+app.logger.debug(f"UPLOAD_FOLDER set to: {UPLOAD_FOLDER}")
 
 @app.route('/config/report', methods=['GET', 'POST'])
 def configure_report():

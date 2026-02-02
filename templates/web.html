@@ -1,0 +1,87 @@
+{% extends "layout.html" %}
+{% block title %}Analyse Web{% endblock %}
+
+{% block content %}
+<h1 class="h2">Analyse de Vulnérabilités Web</h1>
+<p>Lancez des scans de vulnérabilités (XSS, LFI, En-têtes de sécurité...) sur une URL cible.</p>
+
+<div class="card mt-4">
+    <div class="card-body">
+        <h5 class="card-title">Panneau de Contrôle</h5>
+        <div class="mb-3">
+            <label for="target" class="form-label">URL Cible</label>
+            <input type="text" class="form-control" id="target" placeholder="Ex: http://testphp.vulnweb.com">
+        </div>
+        <button id="run-button" class="btn btn-primary">Lancer l'Analyse Web</button>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-body">
+        <h5 class="card-title">Résultats</h5>
+        <div id="loader" style="display: none;" class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <pre id="results" class="bg-light p-3 rounded" style="min-height: 200px;">Les résultats apparaîtront ici...</pre>
+        <div id="download-links" style="display: none;" class="mt-3">
+            <a href="#" id="download-txt" class="btn btn-secondary" download>Télécharger .txt</a>
+            <a href="#" id="download-pdf" class="btn btn-danger" download>Télécharger .pdf</a>
+            <a href="#" id="download-html" class="btn btn-info" download>Télécharger .html</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const runButton = document.getElementById('run-button');
+    const loader = document.getElementById('loader');
+    const resultsDiv = document.getElementById('results');
+    const downloadLinks = document.getElementById('download-links');
+
+    runButton.addEventListener('click', async function() {
+        runButton.disabled = true;
+        loader.style.display = 'block';
+        resultsDiv.textContent = 'Lancement du module...';
+        downloadLinks.style.display = 'none';
+
+        await runModule('web');
+
+        runButton.disabled = false;
+        loader.style.display = 'none';
+    });
+
+    async function runModule(moduleName) {
+        const target = document.getElementById('target').value;
+        if (!target) {
+            alert('Veuillez spécifier une cible.');
+            return;
+        }
+
+        try {
+            const response = await fetch('/run_module', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ module: moduleName, target: target })
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Erreur inconnue');
+
+            resultsDiv.textContent = data.output;
+            
+            if (data.txt_file || data.pdf_file || data.html_file) {
+                downloadLinks.style.display = 'block';
+                document.getElementById('download-txt').href = `/download/${data.txt_file}`;
+                document.getElementById('download-pdf').href = `/download/${data.pdf_file}`;
+                document.getElementById('download-html').href = `/download/${data.html_file}`;
+            }
+
+        } catch (error) {
+            resultsDiv.textContent = `Erreur sur ${moduleName}: ${error.message}`;
+        }
+    }
+});
+</script>
+{% endblock %}
