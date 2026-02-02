@@ -224,6 +224,8 @@ def main():
                 osint.session = current_session
             if args.module == 'web':
                 exploit_web.session = current_session
+            if args.module == 'bruteforce':
+                bruteforce.session = current_session
         except Exception as e:
             utils.log_message('-', f"Impossible d'initialiser la session requests (problème TOR ?): {e}")
             sys.exit(1)
