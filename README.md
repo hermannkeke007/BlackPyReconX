@@ -96,20 +96,51 @@ L'interface web sera disponible à l'adresse `http://127.0.0.1:5000`.
 
 La CLI est l'outil le plus puissant du framework.
 
-*   **Lancer un scan complet (OSINT, réseau, web) sur une cible :**
+*   **Lancer une reconnaissance OSINT sur une cible :**
     ```bash
-    python main.py --target exemple.com --osint --scan --web --report
+    python main.py osint --target exemple.com
     ```
 
-*   **Lancer une analyse web en utilisant Tor :**
+*   **Lancer un scan de ports sur une cible en utilisant Tor :**
     ```bash
     # Assurez-vous que le Navigateur Tor est lancé !
-    python main.py --target site-a-tester.com --web --tor
+    python main.py scan --target site-a-tester.com --tor
+    ```
+
+*   **Lancer une analyse web sur une cible :**
+    ```bash
+    python main.py web --target site-a-tester.com
+    ```
+
+*   **Lancer une attaque DoS sur une cible et un port pendant 60 secondes :**
+    ```bash
+    python main.py dos --target 192.168.1.1 --port 80 --duration 60
+    ```
+
+*   **Lancer une attaque de force brute SSH par dictionnaire :**
+    ```bash
+    python main.py bruteforce --target 192.168.1.10 --service ssh --port 22 --userlist data/usernames.txt --passlist data/passwords.txt
     ```
 
 *   **Capturer le trafic DNS et le sauvegarder :**
     ```bash
-    python main.py --sniff --filter "udp port 53" --output capture_dns.pcap
+    python main.py sniff --iface eth0 --filter "udp port 53" --output capture_dns.pcap
+    ```
+
+*   **Cacher un fichier dans une image (stéganographie) :**
+    ```bash
+    python main.py crypto hide --image input.png --file secret.txt --output output.png
+    ```
+
+*   **Révéler un fichier d'une image stéganographiée :**
+    ```bash
+    python main.py crypto reveal --image output.png --output revealed_secret.txt
+    ```
+
+*   **Générer un rapport pour une cible :**
+    ```bash
+    # Assurez-vous d'avoir exécuté un module comme osint, scan ou web au préalable.
+    python main.py report --target exemple.com
     ```
 
 *   **Compiler un payload de reverse shell :**
