@@ -179,7 +179,7 @@ BlackPyReconX/
 
 Voici quelques-unes des fonctionnalités prévues pour les futures versions :
 
--   [ ] **Amélioration du Bruteforce :** Support de plus de services (RDP, SMB) et de l'authentification web plus complexe.
+-   [ ] **Amélioration du Bruteforce :** Support de plus de services (RDP, SMB).
 -   [ ] **Payloads Multi-plateformes :** Génération de payloads pour Linux et macOS.
 -   [ ] **Visualisation des Données :** Graphiques et tableaux de bord plus avancés dans l'interface web.
 -   [ ] **Persistance Avancée :** Ajout de techniques de persistance pour le payload (ex: clés de registre, services).
@@ -189,6 +189,7 @@ Voici quelques-unes des fonctionnalités prévues pour les futures versions :
 
 ## 🚀 Nouveautés Récentes
 
+*   **Amélioration du module Bruteforce :** Le module de brute-force a été considérablement amélioré, incluant le support pour les attaques contre les formulaires de connexion web.
 *   **Correction du bug de suppression de rapports :** Le mécanisme de suppression des rapports a été amélioré pour gérer correctement les requêtes du frontend et permettre la suppression de plusieurs rapports à la fois.
 *   **Mises à jour des modules :** Diverses améliorations et corrections ont été apportées aux modules `DoS`, `Telegram Bot` et `Utilitaires`.
 *   **Améliorations de l'interface web :** Des ajustements ont été réalisés sur les pages de rapports et d'utilitaires pour une meilleure expérience utilisateur.
