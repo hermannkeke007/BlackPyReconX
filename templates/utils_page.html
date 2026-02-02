@@ -69,6 +69,63 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // --- Steganography Reveal Logic ---
+    const revealForm = document.querySelector('form[action="/stegano/reveal"]');
+    if (revealForm) {
+        revealForm.addEventListener('submit', async function(event) {
+            event.preventDefault(); // Prevent default form submission
+
+            const formData = new FormData(revealForm);
+
+            try {
+                const response = await fetch('/stegano/reveal', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                // Check if the response is a file download (success) or JSON (error/no data)
+                const contentType = response.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const data = await response.json();
+                    if (data.status === 'error') {
+                        alert(`Erreur de Révélation: ${data.message}`); // Display pop-up for error
+                    } else {
+                        // This case should ideally not happen if status is 'error' for non-file responses.
+                        // For other JSON messages, handle accordingly.
+                        alert(`Information: ${data.message}`);
+                    }
+                } else if (response.ok) {
+                    // Assume it's a file download
+                    const blob = await response.blob();
+                    const contentDisposition = response.headers.get('Content-Disposition');
+                    let filename = 'revealed_secret.dat'; // Default filename
+                    if (contentDisposition) {
+                        const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+                        if (filenameMatch && filenameMatch[1]) {
+                            filename = filenameMatch[1];
+                        }
+                    }
+                    
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    alert(`Succès : Le fichier secret "${filename}" a été téléchargé.`);
+                } else {
+                    alert(`Une erreur inattendue est survenue (${response.status} ${response.statusText}).`);
+                }
+
+            } catch (error) {
+                console.error('Error during fetch:', error);
+                alert(`Une erreur réseau est survenue: ${error.message}`);
+            }
+        });
+    }
+
     // --- Sniffer Logic ---
     const startSniffBtn = document.getElementById('start-sniff');
     const stopSniffBtn = document.getElementById('stop-sniff');

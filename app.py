@@ -442,28 +442,40 @@ def list_reports():
 
 @app.route('/api/report/delete', methods=['POST'])
 def delete_report():
-    """Supprime un fichier de rapport spécifique."""
+    """Supprime un ou plusieurs fichiers de rapport."""
     data = request.get_json()
-    filename = data.get('filename')
+    filenames = data.get('filenames') # The frontend sends a list of filenames.
 
-    if not filename:
+    if not filenames or not isinstance(filenames, list):
         return jsonify({'error': 'Nom de fichier manquant'}), 400
 
-    # Sécurité : Valider le nom du fichier pour éviter les attaques par traversée de répertoire
-    safe_filename = secure_filename(filename)
-    if safe_filename != filename:
-        return jsonify({'error': 'Nom de fichier invalide'}), 400
+    errors = []
+    success_count = 0
+    for filename in filenames:
+        safe_filename = secure_filename(filename)
+        if safe_filename != filename:
+            errors.append(f"'{filename}' est un nom de fichier invalide.")
+            continue
 
-    file_path = os.path.join(OUTPUTS_DIR, safe_filename)
+        file_path = os.path.join(OUTPUTS_DIR, safe_filename)
 
-    if os.path.exists(file_path):
-        try:
-            os.remove(file_path)
-            return jsonify({'message': f'Fichier {safe_filename} supprimé avec succès.'})
-        except Exception as e:
-            return jsonify({'error': f'Erreur lors de la suppression : {str(e)}'}), 500
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+                success_count += 1
+            except Exception as e:
+                errors.append(f"Erreur lors de la suppression de {safe_filename}: {e}")
+        else:
+            # This case might not be an "error" if multiple users are deleting files, but for now it is.
+            errors.append(f"Fichier non trouvé: {safe_filename}")
+
+    if success_count == len(filenames):
+        plural = 's' if success_count > 1 else ''
+        return jsonify({'message': f'{success_count} fichier{plural} supprimé{plural} avec succès.'})
+    elif success_count > 0:
+        return jsonify({'message': f'{success_count} fichier(s) supprimé(s), mais {len(errors)} erreur(s): {"; ".join(errors)}'})
     else:
-        return jsonify({'error': 'Fichier non trouvé'}), 404
+        return jsonify({'error': f'Aucun fichier n\'a été supprimé. Erreurs: {"; ".join(errors)}'}), 500
 
 # --- ROUTES POUR LE SNIFFER ---
 
@@ -626,7 +638,7 @@ def stegano_reveal():
     else:
         if os.path.exists(output_path):
             os.remove(output_path)
-        return result, 500
+        return jsonify({'status': 'error', 'message': result}), 200 # Return JSON for error/no data found
 
 if __name__ == '__main__':
     print("[*] Pour lancer l'interface web, exécutez la commande : flask --app app run")

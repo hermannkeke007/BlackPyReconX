@@ -9,10 +9,18 @@
     <div class="card-body">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="card-title mb-0">Rapports Disponibles</h5>
-            <button class="btn btn-sm btn-outline-primary" id="refresh-reports"><i class="bi bi-arrow-clockwise"></i> Actualiser</button>
+            <div class="d-flex align-items-center">
+                <button class="btn btn-sm btn-danger me-2" id="delete-selected-reports" disabled>Supprimer la sélection</button>
+                <button class="btn btn-sm btn-success me-2" id="download-selected-reports" disabled>Télécharger la sélection</button>
+                <button class="btn btn-sm btn-outline-primary" id="refresh-reports"><i class="bi bi-arrow-clockwise"></i> Actualiser</button>
+            </div>
         </div>
-        <div class="mb-3">
-            <input type="text" id="report-search-input" class="form-control" placeholder="Rechercher un rapport...">
+        <div class="mb-3 d-flex align-items-center">
+            <input type="text" id="report-search-input" class="form-control me-2" placeholder="Rechercher un rapport...">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="select-all-reports">
+                <label class="form-check-label" for="select-all-reports">Tout sélectionner</label>
+            </div>
         </div>
         <ul id="report-list" class="list-group">
             <li class="list-group-item">Chargement...</li>
@@ -27,9 +35,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const reportList = document.getElementById('report-list');
     const searchInput = document.getElementById('report-search-input');
     const refreshButton = document.getElementById('refresh-reports');
+    const selectAllCheckbox = document.getElementById('select-all-reports');
+    const deleteSelectedBtn = document.getElementById('delete-selected-reports');
+    const downloadSelectedBtn = document.getElementById('download-selected-reports');
 
     async function loadReports() {
         reportList.innerHTML = '<li class="list-group-item">Chargement des rapports...</li>';
+        deleteSelectedBtn.disabled = true;
+        downloadSelectedBtn.disabled = true;
+        selectAllCheckbox.checked = false;
+
         try {
             const response = await fetch('/api/reports');
             const files = await response.json();
@@ -46,9 +61,20 @@ document.addEventListener('DOMContentLoaded', function() {
                 const li = document.createElement('li');
                 li.className = 'list-group-item d-flex justify-content-between align-items-center';
                 
+                const leftGroup = document.createElement('div');
+                leftGroup.className = 'd-flex align-items-center';
+
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'form-check-input me-2 report-checkbox';
+                checkbox.value = file;
+                checkbox.addEventListener('change', updateBulkActionButtons);
+                leftGroup.appendChild(checkbox);
+
                 const fileName = document.createElement('span');
                 fileName.textContent = file;
-                li.appendChild(fileName);
+                leftGroup.appendChild(fileName);
+                li.appendChild(leftGroup);
 
                 const buttonGroup = document.createElement('div');
                 
@@ -59,29 +85,50 @@ document.addEventListener('DOMContentLoaded', function() {
                 openButton.textContent = 'Ouvrir';
                 buttonGroup.appendChild(openButton);
 
+                const downloadButton = document.createElement('a');
+                downloadButton.href = `/download/${file}`;
+                downloadButton.className = 'btn btn-sm btn-outline-success me-2';
+                downloadButton.textContent = 'Télécharger';
+                buttonGroup.appendChild(downloadButton);
+
                 const deleteButton = document.createElement('button');
                 deleteButton.className = 'btn btn-sm btn-outline-danger';
                 deleteButton.textContent = 'Supprimer';
-                deleteButton.onclick = () => deleteReport(file);
+                deleteButton.onclick = () => deleteReport([file]); // Pass as array for consistency
                 buttonGroup.appendChild(deleteButton);
 
                 li.appendChild(buttonGroup);
                 reportList.appendChild(li);
             });
-
+            updateBulkActionButtons(); // Initial update after loading
         } catch (error) {
             reportList.innerHTML = `<li class="list-group-item text-danger">Erreur: ${error.message}</li>`;
         }
     }
 
-    async function deleteReport(filename) {
-        if (!confirm(`Êtes-vous sûr de vouloir supprimer le fichier ${filename} ?`)) return;
+    function updateBulkActionButtons() {
+        const checkedCheckboxes = document.querySelectorAll('.report-checkbox:checked');
+        const hasSelection = checkedCheckboxes.length > 0;
+        deleteSelectedBtn.disabled = !hasSelection;
+        downloadSelectedBtn.disabled = !hasSelection;
+    }
+
+    selectAllCheckbox.addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.report-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = this.checked;
+        });
+        updateBulkActionButtons();
+    });
+
+    async function deleteReport(filenames) {
+        if (!confirm(`Êtes-vous sûr de vouloir supprimer ${filenames.length > 1 ? 'les fichiers sélectionnés' : 'le fichier ' + filenames[0]} ?`)) return;
 
         try {
-            const response = await fetch('/api/report/delete', {
+            const response = await fetch('/api/report/delete', { // This endpoint will need to be updated for bulk
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ filename })
+                body: JSON.stringify({ filenames: filenames }) // Send list of filenames
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Erreur inconnue');
@@ -93,11 +140,65 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    deleteSelectedBtn.addEventListener('click', () => {
+        const checkedCheckboxes = document.querySelectorAll('.report-checkbox:checked');
+        const filenamesToDelete = Array.from(checkedCheckboxes).map(cb => cb.value);
+        if (filenamesToDelete.length > 0) {
+            deleteReport(filenamesToDelete);
+        }
+    });
+
+    downloadSelectedBtn.addEventListener('click', async () => {
+        const checkedCheckboxes = document.querySelectorAll('.report-checkbox:checked');
+        const filenamesToDownload = Array.from(checkedCheckboxes).map(cb => cb.value);
+        if (filenamesToDownload.length === 0) return;
+
+        try {
+            // New endpoint for bulk download
+            const response = await fetch('/api/reports/bulk_download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filenames: filenamesToDownload })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Erreur inconnue lors du téléchargement groupé.');
+            }
+
+            // Trigger file download
+            const blob = await response.blob();
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = 'reports.zip';
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+                if (filenameMatch && filenameMatch[1]) {
+                    filename = filenameMatch[1];
+                }
+            }
+            
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            alert(`Succès : ${filenamesToDownload.length} rapports téléchargés dans "${filename}".`);
+
+        } catch (error) {
+            alert(`Erreur lors du téléchargement groupé: ${error.message}`);
+        }
+    });
+
+
     function filterReports() {
         const filter = searchInput.value.toUpperCase();
         const items = reportList.getElementsByTagName('li');
         for (let i = 0; i < items.length; i++) {
-            const span = items[i].getElementsByTagName("span")[0];
+            // Find the span containing the filename within the leftGroup div
+            const span = items[i].querySelector('.d-flex.align-items-center span');
             if (span) {
                 const txtValue = span.textContent || span.innerText;
                 if (txtValue.toUpperCase().indexOf(filter) > -1) {

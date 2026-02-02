@@ -93,10 +93,11 @@ def get_requests_session(force_tor=None):
                         json.dump({'tor_ip': test_ip}, f, indent=4)
             else:
                 log_message('!', "Impossible de vérifier l'IP publique de Tor, mais le proxy est actif.")
-        except requests.exceptions.HTTPError as e:
-            log_message('!', f"Le service de vérification d'IP a retourné une erreur (ce qui est courant avec Tor). Le proxy est probablement fonctionnel. Erreur: {e}")
+        except requests.exceptions.ConnectionError as e:
+            log_message('-', f"Problème de connexion Internet. Impossible d'établir la connexion. Erreur: {e}")
+            raise
         except requests.exceptions.RequestException as e:
-            log_message('-', f"La connexion au proxy TOR sur le port 9150 a échoué. Assurez-vous que le Navigateur Tor est lancé. Erreur: {e}")
+            log_message('-', f"Une erreur réseau est survenue lors de la tentative de connexion (Tor ou directe). Erreur: {e}")
             raise
     return session
 

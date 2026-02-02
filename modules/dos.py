@@ -171,11 +171,14 @@ def run(target, port, duration, use_tor=False, num_threads=200):
             print(f'    [+] Attaque en cours sur {status["target"]}:{status["port"]} | Paquets/s: {status["pps"]} | Échecs/s: {status["failed_pps"]} | Temps restant: {remaining_time}s      ', end='\r')
             time.sleep(1)
         
-        print()
+        print("\n", end='') # Ajouter un retour à la ligne après la boucle de statut
+        utils.log_message('+', "Attaque DoS terminée.") # Message pour la fin normale de l'attaque
 
     except (KeyboardInterrupt, SystemExit):
+        print("\n", end='') # Ajouter un retour à la ligne avant le message d'interruption
         utils.log_message('!', "Interruption détectée. Arrêt de l'attaque...")
         stop_attack()
     except Exception as e:
+        print("\n", end='') # Ajouter un retour à la ligne avant le message d'erreur
         utils.log_message('-', f"Une erreur est survenue: {e}")
         stop_attack()
