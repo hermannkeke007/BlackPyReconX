@@ -274,12 +274,26 @@ def get_status():
 def run(attack_type, options):
     start_bruteforce(attack_type, options)
 
-    while get_status()["running"]:
-        status = get_status()
-        print(f'    [+] Attaque en cours sur {status["target"]} ({status["service"]}) | {status["progress"]}      ', end='\r')
-        time.sleep(1)
-    print()
+    try:
+        # Loop while the brute-force is running and not explicitly stopped
+        # The workers will update the pbar. The main thread just waits.
+        while bruteforce_state["running"] and not bruteforce_state["stop_event"].is_set():
+            time.sleep(1) # Keep the main thread alive, allowing KeyboardInterrupt
+            
+    except KeyboardInterrupt:
+        utils.log_message('!', "\nInterruption manuelle détectée. Arrêt de l'attaque par force brute...")
+        stop_bruteforce() # Gracefully stop worker threads and reset state
+        # The finally block will handle pbar closing.
+    finally:
+        # Ensure pbar is closed if it's still open, regardless of how the try block exits
+        if bruteforce_state["pbar"] and not bruteforce_state["pbar"].closed:
+            bruteforce_state["pbar"].close()
+        # Ensure brute-force state is reset, for example, if the loop exited due to completion
+        # but stop_bruteforce wasn't explicitly called (e.g., if found_credentials was set).
+        if bruteforce_state["running"]:
+            stop_bruteforce() # This also resets bruteforce_state["running"] to False
 
+    # The rest of the logic (logging found credentials) remains unchanged.
     if bruteforce_state["found_credentials"]:
         utils.log_message('+', f"Credentials found: {bruteforce_state['found_credentials'][0]}:{bruteforce_state['found_credentials'][1]}")
         with open("outputs/bruteforce_credentials.txt", "a") as f:
