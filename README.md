@@ -156,6 +156,15 @@ Voici quelques-unes des fonctionnalités prévues pour les futures versions :
 
 ---
 
+## 🚀 Nouveautés Récentes
+
+*   **Correction du bug de suppression de rapports :** Le mécanisme de suppression des rapports a été amélioré pour gérer correctement les requêtes du frontend et permettre la suppression de plusieurs rapports à la fois.
+*   **Mises à jour des modules :** Diverses améliorations et corrections ont été apportées aux modules `DoS`, `Telegram Bot` et `Utilitaires`.
+*   **Améliorations de l'interface web :** Des ajustements ont été réalisés sur les pages de rapports et d'utilitaires pour une meilleure expérience utilisateur.
+*   **Mise à jour de la documentation CLI :** La documentation `guide_complet_CLI.md` a été révisée.
+
+---
+
 ## 🤝 Contribution
 
 Les contributions sont les bienvenues ! Si vous souhaitez améliorer le projet, n'hésitez pas à forker le dépôt, à créer une nouvelle branche et à soumettre une Pull Request.
