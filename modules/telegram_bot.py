@@ -51,7 +51,8 @@ AWAITING_BRUTEFORCE_URL, AWAITING_BRUTEFORCE_USER_FIELD,
 AWAITING_BRUTEFORCE_PASS_FIELD, AWAITING_BRUTEFORCE_FAIL_STRING,
 AWAITING_STOP,
 SELECTING_STEGANO_ACTION, AWAITING_STEGANO_IMAGE_HIDE,
-AWAITING_STEGANO_SECRET_FILE, AWAITING_STEGANO_IMAGE_REVEAL) = range(23)
+AWAITING_STEGANO_SECRET_FILE, AWAITING_STEGANO_IMAGE_REVEAL,
+TOR_MENU_STATE) = range(24)
 
 # --- MENUS ET HANDLERS DE BASE ---
 
@@ -272,7 +273,7 @@ async def run_module(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return await back_to_main_menu(update, context)
 
 # --- GESTION DE TOR ---
-async def tor_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def tor_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     config = utils.load_config()
@@ -283,16 +284,86 @@ async def tor_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text("🔒 *Menu de gestion TOR*", reply_markup=reply_markup, parse_mode='Markdown')
-    return SELECTING_ACTION
+    return TOR_MENU_STATE
 
-async def toggle_tor(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def toggle_tor(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     config = utils.load_config()
     config['use_tor'] = not config.get('use_tor', False)
     utils.save_config(config)
     await query.message.reply_text(f"TOR est maintenant {'activé' if config['use_tor'] else 'désactivé'}.")
+    # After toggling, return to the TOR menu state to update the status display
     return await tor_menu(update, context)
+
+
+# --- LANCEMENT PRINCIPAL ---
+
+def run():
+    TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not TOKEN or TOKEN == "VOTRE_TOKEN_DE_BOT_TELEGRAM":
+        utils.log_message('-', "Le token du bot Telegram n'est pas configuré.")
+        return
+
+    utils.log_message('*', "Lancement du bot Telegram interactif...")
+    app = Application.builder().token(TOKEN).build()
+
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            SELECTING_ACTION: [
+                CallbackQueryHandler(ask_for_target, pattern='^(osint|scan|web|report|exfil|dos|bruteforce)$'),
+                CallbackQueryHandler(stegano_menu, pattern='^stegano$'),
+                CallbackQueryHandler(tor_menu, pattern='^tor_menu$'),
+                CallbackQueryHandler(back_to_main_menu, pattern='^main_menu$'), # Keep this for general fallback
+            ],
+            TOR_MENU_STATE: [
+                CallbackQueryHandler(toggle_tor, pattern='^toggle_tor$'),
+                CallbackQueryHandler(back_to_main_menu, pattern='^main_menu$'),
+            ],
+            AWAITING_TARGET: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_target_input)
+            ],
+            AWAITING_CONFIRMATION: [
+                CallbackQueryHandler(run_module, pattern='^confirm_yes$'),
+                CallbackQueryHandler(cancel, pattern='^confirm_no$')
+            ],
+            AWAITING_DOS_PORT: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_dos_port_input)
+            ],
+            AWAITING_DOS_DURATION: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_dos_duration_input)
+            ],
+            AWAITING_BRUTEFORCE_SERVICE: [
+                CallbackQueryHandler(handle_bruteforce_service_input)
+            ],
+            AWAITING_BRUTEFORCE_USERLIST: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bruteforce_userlist_input)
+            ],
+            AWAITING_BRUTEFORCE_PASSLIST: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bruteforce_passlist_input)
+            ],
+            # Stegano states
+            SELECTING_STEGANO_ACTION: [
+                CallbackQueryHandler(stegano_ask_for_cover_image, pattern='^stegano_hide$'),
+                CallbackQueryHandler(stegano_ask_for_reveal_image, pattern='^stegano_reveal$'),
+                CallbackQueryHandler(back_to_main_menu, pattern='^main_menu$'), # Add back to main menu for stegano
+            ],
+            AWAITING_STEGANO_IMAGE_HIDE: [
+                MessageHandler(filters.Document.IMAGE, stegano_handle_image_file)
+            ],
+            AWAITING_STEGANO_SECRET_FILE: [
+                MessageHandler(filters.Document.ALL, stegano_handle_secret_file)
+            ],
+            AWAITING_STEGANO_IMAGE_REVEAL: [
+                MessageHandler(filters.Document.IMAGE, stegano_handle_image_file)
+            ],
+        },
+        fallbacks=[CommandHandler('cancel', cancel), CallbackQueryHandler(back_to_main_menu, pattern='^main_menu$')],
+        per_message=False,
+        allow_reentry=True
+    )
+
 
 # --- GESTION DE LA STÉGANOGRAPHIE ---
 
@@ -433,6 +504,8 @@ def run():
                 CallbackQueryHandler(ask_for_target, pattern='^(osint|scan|web|report|exfil|dos|bruteforce)$'),
                 CallbackQueryHandler(stegano_menu, pattern='^stegano$'),
                 CallbackQueryHandler(tor_menu, pattern='^tor_menu$'),
+            ],
+            TOR_MENU_STATE: [
                 CallbackQueryHandler(toggle_tor, pattern='^toggle_tor$'),
                 CallbackQueryHandler(back_to_main_menu, pattern='^main_menu$'),
             ],
@@ -458,10 +531,10 @@ def run():
             AWAITING_BRUTEFORCE_PASSLIST: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bruteforce_passlist_input)
             ],
-            # Stegano states
             SELECTING_STEGANO_ACTION: [
                 CallbackQueryHandler(stegano_ask_for_cover_image, pattern='^stegano_hide$'),
                 CallbackQueryHandler(stegano_ask_for_reveal_image, pattern='^stegano_reveal$'),
+                CallbackQueryHandler(back_to_main_menu, pattern='^main_menu$'),
             ],
             AWAITING_STEGANO_IMAGE_HIDE: [
                 MessageHandler(filters.Document.IMAGE, stegano_handle_image_file)

@@ -45,7 +45,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 const torStatusDiv = document.getElementById('tor-status');
                 const toggleButton = document.getElementById('toggle-tor-button');
                 if (data.tor_enabled) {
-                    torStatusDiv.innerHTML = `<span class="badge bg-success">Activé</span> IP: ${data.tor_ip || 'Inconnue'}`;
+                    let location_info = '';
+                    let flag_img = '';
+                    if (data.tor_ip_country_code) {
+                        flag_img = `<img src="https://flagcdn.com/16x12/${data.tor_ip_country_code.toLowerCase()}.png" alt="${data.tor_ip_country || 'Unknown Country'}" class="me-2">`;
+                    }
+                    if (data.tor_ip_country || data.tor_ip_city) {
+                        location_info += '(';
+                        if (data.tor_ip_country) {
+                            location_info += data.tor_ip_country;
+                        }
+                        if (data.tor_ip_country && data.tor_ip_city) {
+                            location_info += ', ';
+                        }
+                        if (data.tor_ip_city) {
+                            location_info += data.tor_ip_city;
+                        }
+                        location_info += ')';
+                    }
+                    torStatusDiv.innerHTML = `<span class="badge bg-success">Activé</span> ${flag_img}IP: ${data.tor_ip || 'Inconnue'} ${location_info}`;
                     toggleButton.textContent = 'Désactiver TOR';
                     toggleButton.classList.remove('btn-primary');
                     toggleButton.classList.add('btn-warning');

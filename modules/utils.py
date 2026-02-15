@@ -75,22 +75,32 @@ def get_requests_session(force_tor=None):
         }
         session.proxies = proxies
         try:
-            response = session.get("https://httpbin.org/ip", timeout=20)
+            response = session.get("https://api.ipify.org?format=json", timeout=20)
             response.raise_for_status() # Lève une exception pour les codes d'erreur HTTP
-            test_ip = response.json().get('origin')
+            test_ip = response.json().get('ip')
             if test_ip:
-                log_message('+', f"Connexion via TOR réussie. Adresse IP publique de Tor : [bold yellow]{test_ip}[/bold yellow]")
-                # Sauvegarder l'IP dans le statut
+                geo_response = session.get(f"http://ip-api.com/json/{test_ip}", timeout=10)
+                geo_response.raise_for_status()
+                geo_data = geo_response.json()
+                country = geo_data.get('country', 'Inconnu')
+                city = geo_data.get('city', 'Inconnue')
+                country_code = geo_data.get('countryCode', 'UN') # Default to 'UN' for Unknown
+
+                log_message('+', f"Connexion via TOR réussie. IP: [bold yellow]{test_ip}[/bold yellow] (Pays: {country}, Ville: {city})")
+                # Sauvegarder l'IP et la localisation dans le statut
                 try:
                     with open(os.path.join(os.path.dirname(__file__), '..', 'status.json'), 'r+') as f:
                         status_data = json.load(f)
                         status_data['tor_ip'] = test_ip
+                        status_data['tor_ip_country'] = country
+                        status_data['tor_ip_city'] = city
+                        status_data['tor_ip_country_code'] = country_code
                         f.seek(0)
                         json.dump(status_data, f, indent=4)
                         f.truncate()
                 except (FileNotFoundError, json.JSONDecodeError):
                     with open(os.path.join(os.path.dirname(__file__), '..', 'status.json'), 'w') as f:
-                        json.dump({'tor_ip': test_ip}, f, indent=4)
+                        json.dump({'tor_ip': test_ip, 'tor_ip_country': country, 'tor_ip_city': city, 'tor_ip_country_code': country_code}, f, indent=4)
             else:
                 log_message('!', "Impossible de vérifier l'IP publique de Tor, mais le proxy est actif.")
         except requests.exceptions.ConnectionError as e:

@@ -18,6 +18,7 @@
 import hashlib
 from PIL import Image
 import base64
+from . import utils
 
 # --- Fonctions de Hachage ---
 
@@ -118,40 +119,53 @@ def stegano_hide_file(image_path, file_to_hide_path, output_image_path):
     """
     Fonction principale pour cacher un fichier dans une image.
     """
+    utils.log_message('*', f"T tentative de cacher '{file_to_hide_path}' dans '{image_path}'...")
     try:
         with Image.open(image_path, 'r') as image:
+            utils.log_message('*', f"Image '{image_path}' chargée. Dimensions: {image.size}")
             image = image.convert("RGB")
             with open(file_to_hide_path, 'rb') as f:
                 secret_data = f.read()
+            utils.log_message('*', f"Fichier secret '{file_to_hide_path}' lu. Taille: {len(secret_data)} bytes.")
             
             new_image = _hide_data_in_image(image, secret_data)
             new_image.save(output_image_path, 'PNG')
+            utils.log_message('+', f"Fichier '{file_to_hide_path}' caché avec succès dans '{output_image_path}'.")
             return f"Succès : Fichier '{file_to_hide_path}' caché dans '{output_image_path}'."
     except FileNotFoundError as e:
+        utils.log_message('-', f"Erreur (FileNotFound) : {e.filename}")
         return f"Erreur : Fichier non trouvé - {e.filename}"
     except ValueError as e:
+        utils.log_message('-', f"Erreur (ValueError) : {e}")
         return f"Erreur : {e}"
     except Exception as e:
+        utils.log_message('-', f"Une erreur inattendue est survenue lors du masquage : {e}")
         return f"Une erreur inattendue est survenue : {e}"
 
 def stegano_reveal_file(image_path, output_file_path):
     """
     Fonction principale pour révéler un fichier caché dans une image.
     """
+    utils.log_message('*', f"T tentative de révéler les données de '{image_path}'...")
     try:
         with Image.open(image_path, 'r') as image:
+            utils.log_message('*', f"Image '{image_path}' chargée pour révélation. Dimensions: {image.size}")
             image = image.convert("RGB")
             revealed_data = _reveal_data_from_image(image)
             
             if not revealed_data:
+                utils.log_message('!', "Aucune donnée cachée trouvée dans l'image.")
                 return "Aucune donnée cachée trouvée."
 
             with open(output_file_path, 'wb') as f:
                 f.write(revealed_data)
+            utils.log_message('+', f"Données extraites avec succès et sauvegardées dans '{output_file_path}'. Taille: {len(revealed_data)} bytes.")
             return f"Succès : Données extraites et sauvegardées dans '{output_file_path}'."
     except FileNotFoundError:
+        utils.log_message('-', f"Erreur (FileNotFound) : L'image '{image_path}' n'a pas été trouvée.")
         return f"Erreur : L'image '{image_path}' n'a pas été trouvée."
     except Exception as e:
+        utils.log_message('-', f"Une erreur inattendue est survenue lors de la révélation : {e}")
         return f"Une erreur inattendue est survenue : {e}"
 
 # --- Fonctions d'Encodage ---
