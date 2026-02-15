@@ -10,10 +10,9 @@ pyinstaller
 fpdf2
 python-dotenv
 paramiko
-mysql-connector-python
-psycopg2-binary
 rich
 scapy
 questionary
 telnetlib3
 tqdm
+pytest

