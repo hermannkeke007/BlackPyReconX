@@ -1,9 +1,12 @@
 # Fichiers de cache Python
 __pycache__/
 *.pyc
+tests/__pycache__/
 
 # Fichiers de configuration locaux
 .env
+status.json
+modules/payload_config.json
 
 # Fichiers de log
 *.log
