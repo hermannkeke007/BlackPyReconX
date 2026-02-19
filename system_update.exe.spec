@@ -5,7 +5,7 @@ a = Analysis(
     ['modules\\temp_obfuscated_payload.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('modules\\payload_config.json', '.')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

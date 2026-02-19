@@ -14,7 +14,7 @@
 # Vous devriez avoir reçu une copie de la Licence publique générale GNU
 # avec ce programme. Si non, voir <https://www.gnu.org/licenses/>.
 
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory, redirect, url_for, flash, get_flashed_messages
 from werkzeug.utils import secure_filename
 import os
 import sys
@@ -22,8 +22,10 @@ import json
 import re
 import datetime
 import logging
-import threading # Added for running brute-force in a separate thread
+import threading 
 import time
+
+VERSION = "1.0" # Définir la version ici
 
 # Configuration de la journalisation
 logging.basicConfig(filename='app.log', level=logging.ERROR, 
@@ -34,14 +36,21 @@ sys.path.append(os.path.join(os.path.dirname(__file__), 'modules'))
 
 # Importer les modules de BlackPyReconX
 from modules import osint, scanner, exploit_web, reporting, exfiltration, utils, dos, bruteforce, sniffer, crypto_tools
+from modules.exploit_web import generate_xss_payload, generate_sqli_payload, generate_lfi_payload
+
 
 # --- Global State for Brute-force Thread Management ---
 bruteforce_thread = None 
 
 
 app = Flask(__name__, static_url_path='/static', static_folder='static')
+app.secret_key = 'super_secret_key' # For development purposes
 
 OUTPUTS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), 'outputs'))
+
+@app.context_processor
+def inject_version():
+    return dict(version=VERSION)
 
 @app.after_request
 def add_header(response):
@@ -51,12 +60,58 @@ def add_header(response):
     response.headers['Expires'] = '0'
     return response
 
+@app.before_request
+def check_api_keys():
+    # Exclure les routes statiques et la route de setup elle-même
+    if request.endpoint == 'static' or request.path == '/setup' or request.path.startswith('/static/'):
+        return
+
+    config = utils.load_config()
+    api_keys = config.get('api_keys', {})
+
+    # On considère que la configuration est "incomplète" si une clé essentielle est vide
+    # Note: Telegram keys might be optional depending on feature usage, but we'll include them for initial setup completeness.
+    required_keys = ['shodan', 'abuseipdb', 'telegram_bot_token', 'telegram_chat_id']
+    
+    missing_key = False
+    for key in required_keys:
+        if not api_keys.get(key): # Check if key is missing or its value is empty
+            missing_key = True
+            break
+    
+    if missing_key:
+        return redirect(url_for('setup_page'))
+
 # --- ROUTES DE L'INTERFACE WEB (Nouvelle Structure) ---
 
 @app.route('/')
 def index():
     """Affiche le tableau de bord principal."""
     return render_template('index.html')
+
+@app.route('/setup', methods=['GET', 'POST'])
+def setup_page():
+    if request.method == 'POST':
+        data = request.get_json()
+        config = utils.load_config()
+        
+        # Mettre à jour les clés API
+        if 'api_keys' not in config:
+            config['api_keys'] = {}
+        
+        config['api_keys']['shodan'] = data.get('shodan', '')
+        config['api_keys']['abuseipdb'] = data.get('abuseipdb', '')
+        config['api_keys']['telegram_bot_token'] = data.get('telegram_bot_token', '')
+        config['api_keys']['telegram_chat_id'] = data.get('telegram_chat_id', '')
+
+        utils.save_config(config)
+        flash("Configuration API sauvegardée avec succès ! Le bot Telegram et le CLI sont maintenant fonctionnels.", "success")
+        return jsonify({'message': 'Configuration des clés API sauvegardée avec succès.', 'redirect_to_index': True})
+    else:
+        # GET request: Display the setup form
+        config = utils.load_config()
+        # Pass the config to the template to pre-fill existing values
+        return render_template('setup.html', config=config)
 
 @app.route('/recon')
 def recon():
@@ -71,7 +126,8 @@ def web():
 @app.route('/exploit')
 def exploit():
     """Affiche la page d'Exploitation."""
-    return render_template('exploit.html')
+    config = utils.load_config() # Load global config
+    return render_template('exploit.html', config=config) # Pass config to template
 
 @app.route('/utils')
 def utils_page():
@@ -121,12 +177,12 @@ def run_module():
             session_dir = utils.get_current_session_dir()
 
             # Préparer la session pour les modules qui en ont besoin
-            if module_name in ['osint', 'web']:
-                session = utils.get_requests_session(force_tor=use_tor_flag)
-                if module_name == 'osint':
-                    osint.session = session
-                else:
-                    exploit_web.session = session
+            if module_name == 'osint':
+                osint.session = utils.get_requests_session(force_tor=use_tor_flag)
+                # Shodan API key should be passed to osint module
+                osint.SHODAN_API_KEY = config['api_keys'].get('shodan')
+            elif module_name == 'web':
+                exploit_web.session = utils.get_requests_session(force_tor=use_tor_flag)
 
             # Exécuter le module de scan
             if module_name == 'osint':
@@ -242,9 +298,7 @@ def _run_bruteforce_in_thread(attack_type, options):
         else:
             app.logger.debug("[_run_bruteforce_in_thread] bruteforce_state['running'] is False, no need to call stop_bruteforce.")
         
-        app.logger.debug(f"[_run_bruteforce_in_thread] bruteforce_thread before clearing: {bruteforce_thread}")
         bruteforce_thread = None # Libérer le thread une fois terminé
-        app.logger.debug(f"[_run_bruteforce_in_thread] bruteforce_thread after clearing: {bruteforce_thread}")
 
 @app.route('/bruteforce/start', methods=['POST'])
 def start_bruteforce_web():
@@ -273,6 +327,15 @@ def start_bruteforce_web():
     data = request.get_json()
     attack_type = data.get('attack_type')
     options = data.get('options')
+
+    # Inject wordlist paths from global config if attack_type is dictionary
+    if attack_type == 'dictionary':
+        global_config = utils.load_config()
+        wordlists_config = global_config.get('wordlists', {})
+        options['userlist'] = wordlists_config.get('darkc0de_usernames', options.get('userlist')) # Default to current userlist if not found in global
+        options['passlist'] = wordlists_config.get('passwords', options.get('passlist')) # Default to current passlist if not found in global
+        app.logger.debug(f"Bruteforce: Injected userlist: {options['userlist']}, passlist: {options['passlist']} from global config.")
+
 
     if not attack_type or not options:
         app.logger.debug("Missing attack_type or options.")
@@ -304,7 +367,7 @@ def stop_bruteforce_web():
         return jsonify({'message': 'Attaque par force brute arrêtée.'})
     except Exception as e:
         app.logger.error(f"Erreur lors de l\'arrêt de l\'attaque par force brute: {e}", exc_info=True)
-        return jsonify({'error': f"Erreur lors de l\'arrêt de l\'attaque: {e}"}), 500
+        return jsonify({'error': f"Erreur lors de l'arrêt de l\'attaque: {e}"}), 500
 
 # --- ROUTES POUR LA GESTION DES SERVICES ET TÉLÉCHARGEMENTS ---
 
@@ -412,6 +475,28 @@ def configure_report():
     config['display_logo'] = os.path.basename(config.get('logo_path', ''))
     return render_template('config_report.html', config=config)
 
+
+# --- ROUTE POUR LA CONFIGURATION GLOBALE ---
+@app.route('/config/global', methods=['GET', 'POST'])
+def configure_global():
+    if request.method == 'POST':
+        config = utils.load_config()
+        
+        # Mettre à jour les chemins des wordlists
+        if 'wordlists' not in config:
+            config['wordlists'] = {}
+        config['wordlists']['common_paths'] = request.form.get('wordlist_common_paths', config['wordlists'].get('common_paths'))
+        config['wordlists']['darkc0de_usernames'] = request.form.get('wordlist_darkc0de_usernames', config['wordlists'].get('darkc0de_usernames'))
+        config['wordlists']['passwords'] = request.form.get('wordlist_passwords', config['wordlists'].get('passwords'))
+        config['wordlists']['usernames'] = request.form.get('wordlist_usernames', config['wordlists'].get('usernames'))
+        
+        utils.save_config(config)
+        return jsonify({'message': 'Configuration globale sauvegardée avec succès.'})
+
+    config = utils.load_config()
+    return render_template('global_config.html', config=config)
+
+
 # --- ROUTE POUR LE TÉLÉVERSEMENT DE LISTES ---
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), 'data')
@@ -517,6 +602,23 @@ def delete_report():
     else:
         return jsonify({'error': f'Aucun fichier n\'a été supprimé. Erreurs: {"; ".join(errors)}'}), 500
 
+@app.route('/api/osint/geo', methods=['POST'])
+def get_geo_info():
+    data = request.get_json()
+    target = data.get('target')
+
+    if not target:
+        return jsonify({'error': 'La cible est manquante pour la géolocalisation.'}), 400
+
+    try:
+        # Assurez-vous que la session requests est initialisée
+        # Le module osint gère déjà la création d'une session si 'session' est None
+        geolocation_info = osint.get_geolocation_formatted(target)
+        return jsonify({'geolocation_info': geolocation_info})
+    except Exception as e:
+        app.logger.error(f'Erreur lors de la géolocalisation pour {target}: {e}', exc_info=True)
+        return jsonify({'error': f'Erreur lors de la géolocalisation: {e}'}), 500
+
 # --- ROUTES POUR LE SNIFFER ---
 
 @app.route('/api/interfaces', methods=['GET'])
@@ -545,58 +647,7 @@ def stop_sniffer():
     result = sniffer.stop()
     return jsonify(result)
 
-# --- ROUTES POUR LA CONFIGURATION DU PAYLOAD ---
 
-PAYLOAD_CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'modules', 'payload_config.json')
-
-@app.route('/config/payload', methods=['GET'])
-def get_payload_config():
-    """Lit la configuration actuelle du payload depuis le fichier JSON."""
-    try:
-        with open(PAYLOAD_CONFIG_FILE, 'r', encoding='utf-8') as f:
-            config_data = json.load(f)
-        
-        # Convertir la date YYYY-MM-DD en composants séparés pour le template
-        year, month, day = map(int, config_data.get('ACTIVATION_DATE_STR', '1970-01-01').split('-'))
-
-        config = {
-            'host': config_data.get('REVERSE_HOST', '127.0.0.1'),
-            'year': year,
-            'month': month,
-            'day': day,
-        }
-        return jsonify(config)
-
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        return jsonify({'error': f"Erreur de lecture du fichier de configuration du payload: {e}"}), 500
-
-
-@app.route('/config/payload', methods=['POST'])
-def set_payload_config():
-    """Met à jour la configuration du payload dans le fichier JSON."""
-    data = request.get_json()
-    new_host = data.get('host')
-    new_date_str = data.get('date') # Format YYYY-MM-DD
-
-    if not new_host or not new_date_str:
-        return jsonify({'error': 'Les données fournies sont incomplètes.'}), 400
-
-    try:
-        # Créer le dictionnaire de configuration
-        new_config = {
-            "REVERSE_HOST": new_host,
-            "ACTIVATION_DATE_STR": new_date_str
-        }
-        
-        # Écrire la nouvelle configuration dans le fichier JSON
-        with open(PAYLOAD_CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(new_config, f, indent=2)
-            
-        return jsonify({'message': 'Configuration du payload mise à jour avec succès.'})
-
-    except Exception as e:
-        app.logger.error(f"Erreur lors de la mise à jour du payload: {e}", exc_info=True)
-        return jsonify({'error': str(e)}), 500
 
 
 # --- ROUTES POUR LA STÉGANOGRAPHIE ---
@@ -665,6 +716,9 @@ def stegano_reveal():
         if os.path.exists(output_path):
             os.remove(output_path)
         return jsonify({'status': 'error', 'message': result}), 200 # Return JSON for error/no data found
+
+
+
 
 if __name__ == '__main__':
     print("[*] Pour lancer l'interface web, exécutez la commande : flask --app app run")

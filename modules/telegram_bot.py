@@ -35,8 +35,6 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-from dotenv import load_dotenv
-load_dotenv()
 
 from modules import osint, scanner, exploit_web, reporting, exfiltration, utils, dos, bruteforce, crypto_tools
 
@@ -52,7 +50,7 @@ AWAITING_BRUTEFORCE_PASS_FIELD, AWAITING_BRUTEFORCE_FAIL_STRING,
 AWAITING_STOP,
 SELECTING_STEGANO_ACTION, AWAITING_STEGANO_IMAGE_HIDE,
 AWAITING_STEGANO_SECRET_FILE, AWAITING_STEGANO_IMAGE_REVEAL,
-TOR_MENU_STATE) = range(24)
+TOR_MENU_STATE, POST_TASK_MENU) = range(25)
 
 # --- MENUS ET HANDLERS DE BASE ---
 
@@ -62,7 +60,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
          InlineKeyboardButton("📡 Scan de Ports", callback_data='scan')],
         [InlineKeyboardButton("🌐 Scan Web", callback_data='web'),
          InlineKeyboardButton("📄 Rapport", callback_data='report')],
-        [InlineKeyboardButton("📦 Exfiltration", callback_data='exfil'),
+        [InlineKeyboardButton("📍 Géolocalisation", callback_data='geo'), # New Geolocation button
+         InlineKeyboardButton("📦 Exfiltration", callback_data='exfil'),
          InlineKeyboardButton("💥 Attaque DoS", callback_data='dos'),
          InlineKeyboardButton("💪 Force Brute", callback_data='bruteforce')],
         [InlineKeyboardButton("🖼️ Stéganographie", callback_data='stegano'),
@@ -81,6 +80,23 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def back_to_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
     return await start(update, context)
+
+async def post_task_menu(update: Update, context: ContextTypes.DEFAULT_TYPE, message_text: str = "Tâche terminée.") -> int:
+    keyboard = [[InlineKeyboardButton("⬅️ Retour au menu principal", callback_data='main_menu')]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # Déterminer la méthode de réponse (message ou callback_query)
+    if update.callback_query:
+        # Essayer de modifier le message existant si possible
+        try:
+            await update.callback_query.edit_message_text(message_text, reply_markup=reply_markup, parse_mode='Markdown')
+        except Exception: # Si le message est trop ancien ou déjà modifié
+            await context.bot.send_message(chat_id=update.effective_chat.id, text=message_text, reply_markup=reply_markup, parse_mode='Markdown')
+    elif update.message: # Si la conversation a été initiée par un message
+        await update.message.reply_text(message_text, reply_markup=reply_markup, parse_mode='Markdown')
+    
+    context.user_data.clear() # Clear user data after task
+    return POST_TASK_MENU
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -101,6 +117,12 @@ async def ask_for_target(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if module == 'exfil':
         return await confirm_action(update, context)
+    elif module == 'geo':
+        await query.edit_message_text(
+            f"🎯 *Module sélectionné : Géolocalisation*\n\nVeuillez entrer la cible (adresse IP ou domaine, ex: `google.com` ou `8.8.8.8`):",
+            parse_mode='Markdown'
+        )
+        return AWAITING_TARGET
 
     await query.edit_message_text(
         f"🎯 *Module sélectionné : {module.upper()}*\n\nVeuillez entrer la cible (ex: `exemple.com` ou `192.168.1.1`):",
@@ -183,7 +205,33 @@ async def run_module(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     try:
         result = None
-        if module == 'dos':
+        if module == 'geo':
+            # Similar to other report-generating modules
+            def blocking_task_geo():
+                utils.reset_session_dir()
+                session_dir = utils.get_current_session_dir()
+                osint.session = utils.get_requests_session(force_tor=False) # Geo module does not use TOR by default unless specified
+                osint.run(target, session_dir, geo_flag=True) # Ensure raw geo data is saved
+                return reporting.run(target, session_dir)
+
+            txt_file, pdf_file, _ = await asyncio.to_thread(blocking_task_geo)
+            
+            await query.edit_message_text("✅ Géolocalisation terminée. Envoi des rapports...")
+            
+            if txt_file and os.path.exists(os.path.join('outputs', txt_file)):
+                with open(os.path.join('outputs', txt_file), 'r', encoding='utf-8', errors='replace') as f:
+                    preview = f.read(1000)
+                await context.bot.send_message(chat_id=chat_id, text=f"📄 *Aperçu des résultats ({txt_file})*\n\n`{preview}`...", parse_mode='Markdown')
+
+            for report_file in [txt_file, pdf_file]:
+                if report_file and os.path.exists(os.path.join('outputs', report_file)):
+                    with open(os.path.join('outputs', report_file), 'rb') as f:
+                        await context.bot.send_document(chat_id=chat_id, document=f)
+                else:
+                    await context.bot.send_message(chat_id=chat_id, text=f"❌ Erreur : Fichier de rapport {report_file} non trouvé.")
+            
+            return await post_task_menu(update, context, f"✅ Géolocalisation pour {target} terminée. Vos rapports sont joints.")
+        elif module == 'dos':
             port = int(context.user_data.get('port'))
             duration = int(context.user_data.get('duration'))
             use_tor = context.user_data.get('use_tor', False)
@@ -264,13 +312,15 @@ async def run_module(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                         await context.bot.send_document(chat_id=chat_id, document=f)
                 else:
                     await context.bot.send_message(chat_id=chat_id, text=f"❌ Erreur : Fichier de rapport {report_file} non trouvé.")
+            
+            return await post_task_menu(update, context, f"✅ Tâche '{module.upper()}' terminée. Vos rapports sont joints.")
         else:
-             await query.edit_message_text(result)
+            await query.edit_message_text(result)
+            return await post_task_menu(update, context, result)
 
     except Exception as e:
         await context.bot.send_message(chat_id=chat_id, text=f"❌ Erreur : {e}")
-    
-    return await back_to_main_menu(update, context)
+        return await post_task_menu(update, context, f"❌ Erreur lors de l'exécution du module. Détails: {e}")
 
 # --- GESTION DE TOR ---
 async def tor_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -297,201 +347,158 @@ async def toggle_tor(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return await tor_menu(update, context)
 
 
-# --- LANCEMENT PRINCIPAL ---
 
-def run():
-    TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-    if not TOKEN or TOKEN == "VOTRE_TOKEN_DE_BOT_TELEGRAM":
-        utils.log_message('-', "Le token du bot Telegram n'est pas configuré.")
-        return
-
-    utils.log_message('*', "Lancement du bot Telegram interactif...")
-    app = Application.builder().token(TOKEN).build()
-
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start)],
-        states={
-            SELECTING_ACTION: [
-                CallbackQueryHandler(ask_for_target, pattern='^(osint|scan|web|report|exfil|dos|bruteforce)$'),
-                CallbackQueryHandler(stegano_menu, pattern='^stegano$'),
-                CallbackQueryHandler(tor_menu, pattern='^tor_menu$'),
-                CallbackQueryHandler(back_to_main_menu, pattern='^main_menu$'), # Keep this for general fallback
-            ],
-            TOR_MENU_STATE: [
-                CallbackQueryHandler(toggle_tor, pattern='^toggle_tor$'),
-                CallbackQueryHandler(back_to_main_menu, pattern='^main_menu$'),
-            ],
-            AWAITING_TARGET: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_target_input)
-            ],
-            AWAITING_CONFIRMATION: [
-                CallbackQueryHandler(run_module, pattern='^confirm_yes$'),
-                CallbackQueryHandler(cancel, pattern='^confirm_no$')
-            ],
-            AWAITING_DOS_PORT: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_dos_port_input)
-            ],
-            AWAITING_DOS_DURATION: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_dos_duration_input)
-            ],
-            AWAITING_BRUTEFORCE_SERVICE: [
-                CallbackQueryHandler(handle_bruteforce_service_input)
-            ],
-            AWAITING_BRUTEFORCE_USERLIST: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bruteforce_userlist_input)
-            ],
-            AWAITING_BRUTEFORCE_PASSLIST: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, handle_bruteforce_passlist_input)
-            ],
-            # Stegano states
-            SELECTING_STEGANO_ACTION: [
-                CallbackQueryHandler(stegano_ask_for_cover_image, pattern='^stegano_hide$'),
-                CallbackQueryHandler(stegano_ask_for_reveal_image, pattern='^stegano_reveal$'),
-                CallbackQueryHandler(back_to_main_menu, pattern='^main_menu$'), # Add back to main menu for stegano
-            ],
-            AWAITING_STEGANO_IMAGE_HIDE: [
-                MessageHandler(filters.Document.IMAGE, stegano_handle_image_file)
-            ],
-            AWAITING_STEGANO_SECRET_FILE: [
-                MessageHandler(filters.Document.ALL, stegano_handle_secret_file)
-            ],
-            AWAITING_STEGANO_IMAGE_REVEAL: [
-                MessageHandler(filters.Document.IMAGE, stegano_handle_image_file)
-            ],
-        },
-        fallbacks=[CommandHandler('cancel', cancel), CallbackQueryHandler(back_to_main_menu, pattern='^main_menu$')],
-        per_message=False,
-        allow_reentry=True
-    )
-
-
-# --- GESTION DE LA STÉGANOGRAPHIE ---
-
+# --- STÉGANOGRAPHIE ---
 async def stegano_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     keyboard = [
-        [InlineKeyboardButton(" caché un fichier", callback_data='stegano_hide'),
-         InlineKeyboardButton("🤫 Révéler un fichier", callback_data='stegano_reveal')],
+        [InlineKeyboardButton("Cacher un fichier", callback_data='stegano_hide'),
+         InlineKeyboardButton("Révéler un fichier", callback_data='stegano_reveal')],
         [InlineKeyboardButton("⬅️ Retour", callback_data='main_menu')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await query.edit_message_text("🖼️ *Menu Stéganographie*\n\nQue souhaitez-vous faire ?", reply_markup=reply_markup, parse_mode='Markdown')
+    await query.edit_message_text("🖼️ *Menu de Stéganographie*\n\nChoisissez une action :", reply_markup=reply_markup, parse_mode='Markdown')
     return SELECTING_STEGANO_ACTION
 
 async def stegano_ask_for_cover_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    context.user_data['stegano_state'] = AWAITING_STEGANO_IMAGE_HIDE
-    await query.edit_message_text("‼️ *IMPORTANT* ‼️\n\nVeuillez envoyer l'image de couverture EN TANT QUE **FICHIER** (non compressé). N'utilisez PAS l'option 'Photo'.")
+    context.user_data['stegano_action'] = 'hide'
+    await query.edit_message_text("🖼️ Veuillez envoyer l'image de couverture (en tant que fichier/document).")
     return AWAITING_STEGANO_IMAGE_HIDE
 
 async def stegano_ask_for_reveal_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    context.user_data['stegano_state'] = AWAITING_STEGANO_IMAGE_REVEAL
-    await query.edit_message_text("‼️ *IMPORTANT* ‼️\n\nVeuillez envoyer l'image contenant le secret EN TANT QUE **FICHIER** (non compressé). N'utilisez PAS l'option 'Photo'.")
+    context.user_data['stegano_action'] = 'reveal'
+    await query.edit_message_text("🖼️ Veuillez envoyer l'image contenant le secret (en tant que fichier/document).")
     return AWAITING_STEGANO_IMAGE_REVEAL
 
 async def stegano_handle_image_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    message = update.message
-    state = context.user_data.get('stegano_state')
-    keyboard_back = [[InlineKeyboardButton("⬅️ Retour au menu principal", callback_data='main_menu')]]
-    reply_markup_back = InlineKeyboardMarkup(keyboard_back)
+    chat_id = update.effective_chat.id
+    action = context.user_data.get('stegano_action')
 
-    if not message.document or not message.document.mime_type or not message.document.mime_type.startswith('image/') :
-        await message.reply_text("❌ Erreur : Veuillez envoyer une image en tant que **Document**.", reply_markup=reply_markup_back, parse_mode='Markdown')
-        return state
+    try:
+        doc = update.message.document
+        if not doc.mime_type.startswith('image/'):
+            await update.message.reply_text("❌ Erreur : Le fichier envoyé n'est pas une image.")
+            return
 
-    file_to_process = message.document
-    file_id = file_to_process.file_id
-    file = await context.bot.get_file(file_id)
-    
-    outputs_dir = os.path.join(os.path.dirname(__file__), '..', 'outputs')
-    os.makedirs(outputs_dir, exist_ok=True)
-    
-    temp_file_path = os.path.join(outputs_dir, file_to_process.file_name)
-    await file.download_to_drive(temp_file_path)
-
-    if state == AWAITING_STEGANO_IMAGE_HIDE:
-        context.user_data['cover_image'] = temp_file_path
-        await message.reply_text("✅ Image de couverture reçue. Envoyez maintenant le fichier secret (en tant que document).")
-        return AWAITING_STEGANO_SECRET_FILE
-
-    elif state == AWAITING_STEGANO_IMAGE_REVEAL:
-        await message.reply_text("Image reçue. Traitement en cours...")
+        file = await context.bot.get_file(doc.file_id)
         
-        output_filename = "revealed_secret.dat"
-        output_path = os.path.join(outputs_dir, output_filename)
+        # We need a predictable place to save files
+        temp_dir = os.path.join(utils.get_current_session_dir(create=True), 'stegano_temp')
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        file_path = os.path.join(temp_dir, doc.file_name)
+        await file.download_to_drive(file_path)
 
-        result = await asyncio.to_thread(crypto_tools.stegano_reveal_file, temp_file_path, output_path)
+        context.user_data['image_path'] = file_path
+        await update.message.reply_text(f"✅ Image '{doc.file_name}' reçue.")
 
-        if "Succès" in result:
-            await message.reply_text("Secret trouvé ! Voici le fichier extrait :")
-            with open(output_path, 'rb') as f:
-                await context.bot.send_document(chat_id=message.chat_id, document=f)
-        else:
-            await message.reply_text(f"Erreur ou secret non trouvé : {result}")
+        if action == 'hide':
+            await update.message.reply_text("📂 Maintenant, envoyez le fichier secret à cacher.")
+            return AWAITING_STEGANO_SECRET_FILE
+        elif action == 'reveal':
+            return await stegano_run_reveal(update, context)
 
-        if os.path.exists(temp_file_path): os.remove(temp_file_path)
-        if os.path.exists(output_path): os.remove(output_path)
-        await message.reply_text("Opération terminée.", reply_markup=reply_markup_back)
-        context.user_data.clear()
-        return ConversationHandler.END
-
-async def stegano_handle_secret_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    message = update.message
-    chat_id = message.chat_id
-    keyboard_back = [[InlineKeyboardButton("⬅️ Retour au menu principal", callback_data='main_menu')]]
-    reply_markup_back = InlineKeyboardMarkup(keyboard_back)
-
-    if not message.document:
-        await message.reply_text("❌ Erreur : Veuillez envoyer le secret en tant que **Document**.", reply_markup=reply_markup_back, parse_mode='Markdown')
-        return AWAITING_STEGANO_SECRET_FILE
-
-    secret_file_to_process = message.document
-    file_id = secret_file_to_process.file_id
-    file = await context.bot.get_file(file_id)
-    
-    outputs_dir = os.path.join(os.path.dirname(__file__), '..', 'outputs')
-    os.makedirs(outputs_dir, exist_ok=True)
-    
-    secret_file_path = os.path.join(outputs_dir, secret_file_to_process.file_name)
-    await file.download_to_drive(secret_file_path)
-
-    cover_image_path = context.user_data.get('cover_image')
-    
-    if not cover_image_path:
-        await message.reply_text("Erreur : l'image de couverture est manquante. Veuillez recommencer.", reply_markup=reply_markup_back)
+    except Exception as e:
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Erreur lors de la gestion de l'image : {e}")
         return await back_to_main_menu(update, context)
 
-    await message.reply_text("Fichiers reçus. Traitement en cours...")
+
+async def stegano_handle_secret_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    chat_id = update.effective_chat.id
+
+    try:
+        doc = update.message.document
+        file = await context.bot.get_file(doc.file_id)
+        
+        temp_dir = os.path.join(utils.get_current_session_dir(), 'stegano_temp')
+        secret_path = os.path.join(temp_dir, doc.file_name)
+        await file.download_to_drive(secret_path)
+
+        context.user_data['secret_path'] = secret_path
+        await update.message.reply_text(f"✅ Fichier secret '{doc.file_name}' reçu.")
+        
+        return await stegano_run_hide(update, context)
+
+    except Exception as e:
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Erreur lors de la gestion du fichier secret : {e}")
+        return await back_to_main_menu(update, context)
+
+
+async def stegano_run_hide(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    image_path = context.user_data.get('image_path')
+    secret_path = context.user_data.get('secret_path')
+
+    if not all([image_path, secret_path]):
+        await update.message.reply_text("❌ Erreur : L'image de couverture ou le fichier secret est manquant.")
+        return await back_to_main_menu(update, context)
+
+    await update.message.reply_text("⏳ Dissimulation du fichier en cours...")
     
-    output_filename = "stegano_" + os.path.basename(cover_image_path)
-    output_path = os.path.join(outputs_dir, output_filename)
+    try:
+        output_filename = f"steg_{os.path.basename(image_path)}"
+        output_path = os.path.join(os.path.dirname(image_path), output_filename)
 
-    result = await asyncio.to_thread(crypto_tools.stegano_hide_file, cover_image_path, secret_file_path, output_path)
+        def blocking_task():
+            return crypto_tools.stegano_hide_file(image_path, secret_path, output_path)
+            
+        result = await asyncio.to_thread(blocking_task)
 
-    if "Succès" in result:
-        await message.reply_text("Opération terminée. Voici votre image avec le fichier caché :")
-        with open(output_path, 'rb') as f:
-            await context.bot.send_document(chat_id=chat_id, document=f)
-    else:
-        await message.reply_text(f"Erreur lors du traitement : {result}")
+        if "Succès" in result:
+            await update.message.reply_text("✅ Fichier caché avec succès ! Envoi de l'image modifiée...")
+            with open(output_path, 'rb') as f:
+                await context.bot.send_document(chat_id=chat_id, document=f, filename=output_filename)
+        else:
+            await update.message.reply_text(f"❌ Échec de la dissimulation du fichier. Raison : {result}")
 
-    if os.path.exists(cover_image_path): os.remove(cover_image_path)
-    if os.path.exists(secret_file_path): os.remove(secret_file_path)
-    if os.path.exists(output_path): os.remove(output_path)
-    await message.reply_text("Opération terminée.", reply_markup=reply_markup_back)
-    context.user_data.clear()
-    return ConversationHandler.END
+    except Exception as e:
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Erreur lors de la stéganographie : {e}")
+        
+    return await back_to_main_menu(update, context)
+
+async def stegano_run_reveal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    image_path = context.user_data.get('image_path')
+
+    if not image_path:
+        await update.message.reply_text("❌ Erreur : L'image à analyser est manquante.")
+        return await back_to_main_menu(update, context)
+
+    await update.message.reply_text("🔎 Recherche d'un fichier caché en cours...")
+
+    try:
+        output_filename = "revealed_secret.txt" # Default name
+        output_path = os.path.join(os.path.dirname(image_path), output_filename)
+
+        def blocking_task():
+            return crypto_tools.stegano_reveal_file(image_path, output_path)
+
+        result = await asyncio.to_thread(blocking_task)
+
+        if "Succès" in result:
+            await update.message.reply_text("✅ Fichier caché trouvé et extrait ! Envoi du fichier...")
+            with open(output_path, 'rb') as f:
+                await context.bot.send_document(chat_id=chat_id, document=f, filename=os.path.basename(output_path))
+        else:
+            await update.message.reply_text(f"AUCUN fichier caché n'a été trouvé ou une erreur est survenue. Raison : {result}")
+
+    except Exception as e:
+        await context.bot.send_message(chat_id=chat_id, text=f"❌ Erreur lors de la révélation : {e}")
+
+    return await back_to_main_menu(update, context)
 
 # --- LANCEMENT PRINCIPAL ---
 
 def run():
-    TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-    if not TOKEN or TOKEN == "VOTRE_TOKEN_DE_BOT_TELEGRAM":
-        utils.log_message('-', "Le token du bot Telegram n'est pas configuré.")
+    config = utils.load_config()
+    TOKEN = config['api_keys'].get("telegram_bot_token")
+    if not TOKEN:
+        utils.log_message('-', "Le token du bot Telegram n'est pas configuré dans config.json.")
         return
 
     utils.log_message('*', "Lancement du bot Telegram interactif...")
@@ -501,7 +508,7 @@ def run():
         entry_points=[CommandHandler('start', start)],
         states={
             SELECTING_ACTION: [
-                CallbackQueryHandler(ask_for_target, pattern='^(osint|scan|web|report|exfil|dos|bruteforce)$'),
+                CallbackQueryHandler(ask_for_target, pattern='^(osint|scan|web|report|exfil|dos|bruteforce|geo)$'),
                 CallbackQueryHandler(stegano_menu, pattern='^stegano$'),
                 CallbackQueryHandler(tor_menu, pattern='^tor_menu$'),
             ],
@@ -545,6 +552,9 @@ def run():
             AWAITING_STEGANO_IMAGE_REVEAL: [
                 MessageHandler(filters.Document.IMAGE, stegano_handle_image_file)
             ],
+            POST_TASK_MENU: [
+                CallbackQueryHandler(back_to_main_menu, pattern='^main_menu$'),
+            ]
         },
         fallbacks=[CommandHandler('cancel', cancel), CallbackQueryHandler(back_to_main_menu, pattern='^main_menu$')],
         per_message=False,
@@ -560,5 +570,4 @@ if __name__ == '__main__':
     if os.path.basename(os.getcwd()) == 'modules':
         os.chdir('..')
         sys.path.insert(0, os.getcwd())
-    from modules import utils
     run()

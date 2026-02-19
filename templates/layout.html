@@ -51,7 +51,7 @@
 <body>
     <div class="sidebar">
         <div class="logo">
-            <h3><i class="bi bi-shield-shaded"></i> BlackPyReconX</h3>
+            <h3><i class="bi bi-shield-shaded"></i> BlackPyReconX <span class="text-white">v{{ version }}</span></h3>
         </div>
         <ul class="nav flex-column">
             <li class="nav-item">
@@ -66,6 +66,7 @@
             <li class="nav-item">
                 <a class="nav-link {% if request.path == url_for('exploit') %}active{% endif %}" href="{{ url_for('exploit') }}"><i class="bi bi-lightning-charge-fill"></i> Exploitation</a>
             </li>
+
             <li class="nav-item">
                 <a class="nav-link {% if request.path == url_for('utils_page') %}active{% endif %}" href="{{ url_for('utils_page') }}"><i class="bi bi-tools"></i> Utilitaires</a>
             </li>
@@ -73,13 +74,26 @@
                 <a class="nav-link {% if request.path == url_for('reports') %}active{% endif %}" href="{{ url_for('reports') }}"><i class="bi bi-file-earmark-text-fill"></i> Rapports</a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if request.path == url_for('configure_report') %}active{% endif %}" href="{{ url_for('configure_report') }}"><i class="bi bi-gear-fill"></i> Configuration</a>
+                <a class="nav-link {% if request.path == url_for('configure_report') %}active{% endif %}" href="{{ url_for('configure_report') }}"><i class="bi bi-gear-fill"></i> Rapports Config</a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if request.path == url_for('configure_global') %}active{% endif %}" href="{{ url_for('configure_global') }}"><i class="bi bi-sliders"></i> Globale Config</a>
             </li>
         </ul>
     </div>
 
     <div class="content">
         <div class="container-fluid">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
             {% block content %}{% endblock %}
         </div>
     </div>

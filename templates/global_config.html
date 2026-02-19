@@ -1,0 +1,90 @@
+{% extends "layout.html" %}
+
+{% block title %}Configuration Globale{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Configuration Globale du Framework</h1>
+
+    <div id="alertMessage" class="alert alert-success d-none" role="alert">
+        Configuration sauvegardée avec succès.
+    </div>
+
+    <form id="globalConfigForm" action="/config/global" method="POST">
+        <div class="card mb-3">
+            <div class="card-header">
+                Chemins des Wordlists
+            </div>
+            <div class="card-body">
+                <div class="form-group mb-3">
+                    <label for="wordlist_common_paths" class="fw-bold">Chemin vers common_paths.txt :</label>
+                    <input type="text" class="form-control" id="wordlist_common_paths" name="wordlist_common_paths" value="{{ config.wordlists.common_paths if config.wordlists else '' }}">
+                    <small class="form-text text-muted">Utilisé par l'analyseur web pour la recherche de chemins sensibles.</small>
+                </div>
+                <div class="form-group mb-3">
+                    <label for="wordlist_darkc0de_usernames" class="fw-bold">Chemin vers darkc0de.txt (noms d'utilisateurs) :</label>
+                    <input type="text" class="form-control" id="wordlist_darkc0de_usernames" name="wordlist_darkc0de_usernames" value="{{ config.wordlists.darkc0de_usernames if config.wordlists else '' }}">
+                    <small class="form-text text-muted">Utilisé par le module de bruteforce pour les noms d'utilisateurs (souvent un dictionnaire très large).</small>
+                </div>
+                <div class="form-group mb-3">
+                    <label for="wordlist_passwords" class="fw-bold">Chemin vers passwords.txt :</label>
+                    <input type="text" class="form-control" id="wordlist_passwords" name="wordlist_passwords" value="{{ config.wordlists.passwords if config.wordlists else '' }}">
+                    <small class="form-text text-muted">Utilisé par le module de bruteforce pour les mots de passe.</small>
+                </div>
+                <div class="form-group mb-3">
+                    <label for="wordlist_usernames" class="fw-bold">Chemin vers usernames.txt :</label>
+                    <input type="text" class="form-control" id="wordlist_usernames" name="wordlist_usernames" value="{{ config.wordlists.usernames if config.wordlists else '' }}">
+                    <small class="form-text text-muted">Utilisé par le module de bruteforce pour des noms d'utilisateurs génériques.</small>
+                </div>
+            </div>
+        </div>
+
+        {# Futur emplacement pour d'autres sections de configuration #}
+
+        <button type="submit" class="btn btn-primary mt-3">Sauvegarder la Configuration</button>
+    </form>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('globalConfigForm').addEventListener('submit', function(event) {
+            event.preventDefault(); // Empêche l'envoi classique du formulaire
+
+            const form = event.target;
+            const formData = new FormData(form);
+            const alertMessage = document.getElementById('alertMessage');
+
+            fetch(form.action, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.message) {
+                    alertMessage.textContent = data.message;
+                    alertMessage.classList.remove('d-none');
+                    alertMessage.classList.add('show');
+                    setTimeout(() => {
+                        alertMessage.classList.remove('show');
+                        alertMessage.classList.add('d-none');
+                    }, 3000); // Masque l'alerte après 3 secondes
+                } else if (data.error) {
+                    alertMessage.classList.remove('alert-success');
+                    alertMessage.classList.add('alert-danger');
+                    alertMessage.textContent = data.error;
+                    alertMessage.classList.remove('d-none');
+                    alertMessage.classList.add('show');
+                }
+            })
+            .catch(error => {
+                console.error('Erreur lors de l\'envoi du formulaire:', error);
+                alertMessage.classList.remove('alert-success');
+                alertMessage.classList.add('alert-danger');
+                alertMessage.textContent = 'Une erreur est survenue lors de la sauvegarde.';
+                alertMessage.classList.remove('d-none');
+                alertMessage.classList.add('show');
+            });
+        });
+    });
+</script>
+{% endblock %}

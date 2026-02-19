@@ -7,22 +7,22 @@
 
 <div class="card mt-4">
     <div class="card-body">
-        <h5 class="card-title">Panneau de Contrôle</h5>
+        <h5 class="card-title fw-bold">Panneau de Contrôle</h5>
         <div class="mb-3">
-            <label for="target" class="form-label">Cible (IP ou Domaine)</label>
+            <label for="target" class="form-label fw-bold">Cible (IP ou Domaine)</label>
             <input type="text" class="form-control" id="target" placeholder="Ex: google.com">
         </div>
         
         <div class="mb-3">
             <div class="form-check">
                 <input class="form-check-input" type="checkbox" value="osint" id="chk-osint">
-                <label class="form-check-label" for="chk-osint">
+                <label class="form-check-label fw-bold" for="chk-osint">
                     Lancer la reconnaissance OSINT
                 </label>
             </div>
             <div class="form-check">
                 <input class="form-check-input" type="checkbox" value="scan" id="chk-scan">
-                <label class="form-check-label" for="chk-scan">
+                <label class="form-check-label fw-bold" for="chk-scan">
                     Lancer le scan de ports et services
                 </label>
             </div>
@@ -34,7 +34,22 @@
 
 <div class="card mt-4">
     <div class="card-body">
-        <h5 class="card-title">Résultats</h5>
+        <h5 class="card-title fw-bold">Géolocalisation d'IP</h5>
+        <div class="mb-3">
+            <label for="geo-target" class="form-label fw-bold">Cible (IP ou Domaine)</label>
+            <input type="text" class="form-control" id="geo-target" placeholder="Ex: 8.8.8.8">
+        </div>
+        <button id="get-geo-button" class="btn btn-info">Obtenir Géolocalisation</button>
+        <div id="geo-loader" style="display: none;" class="spinner-border text-info mt-3" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <pre id="geo-results" class="bg-light p-3 rounded mt-3" style="min-height: 100px;">Les informations de géolocalisation apparaîtront ici...</pre>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="card-body">
+        <h5 class="card-title fw-bold">Résultats</h5>
         <div id="loader" style="display: none;" class="spinner-border text-primary" role="status">
             <span class="visually-hidden">Loading...</span>
         </div>
@@ -112,6 +127,43 @@ document.addEventListener('DOMContentLoaded', function() {
             resultsDiv.textContent += `\nErreur sur ${moduleName}: ${error.message}`;
         }
     }
+
+    // --- Géolocalisation JS ---
+    const getGeoButton = document.getElementById('get-geo-button');
+    const geoTargetInput = document.getElementById('geo-target');
+    const geoLoader = document.getElementById('geo-loader');
+    const geoResultsDiv = document.getElementById('geo-results');
+
+    getGeoButton.addEventListener('click', async function() {
+        const target = geoTargetInput.value;
+        if (!target) {
+            alert('Veuillez spécifier une cible pour la géolocalisation.');
+            return;
+        }
+
+        getGeoButton.disabled = true;
+        geoLoader.style.display = 'block';
+        geoResultsDiv.textContent = 'Obtention des informations de géolocalisation...';
+
+        try {
+            const response = await fetch('/api/osint/geo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ target: target })
+            });
+
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Erreur inconnue');
+
+            geoResultsDiv.textContent = data.geolocation_info;
+
+        } catch (error) {
+            geoResultsDiv.textContent = `Erreur de géolocalisation: ${error.message}`;
+        } finally {
+            getGeoButton.disabled = false;
+            geoLoader.style.display = 'none';
+        }
+    });
 });
 </script>
 {% endblock %}

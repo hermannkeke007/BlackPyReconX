@@ -46,13 +46,42 @@ def log_message(level: str, message: str):
 
 def load_config():
     """Charge la configuration depuis config.json."""
+    default_config = {
+        "use_tor": False,
+        "api_keys": {
+            "shodan": "",
+            "abuseipdb": "",
+            "telegram_bot_token": "",
+            "telegram_chat_id": ""
+        },
+        "wordlists": {
+            "common_paths": "data/common_paths.txt",
+            "darkc0de_usernames": "data/darkc0de.txt",
+            "passwords": "data/passwords.txt",
+            "usernames": "data/usernames.txt"
+        }
+    }
+    
     if not os.path.exists(CONFIG_FILE):
-        return {"use_tor": False}
+        return default_config
     try:
         with open(CONFIG_FILE, 'r') as f:
-            return json.load(f)
+            config = json.load(f)
+            # Ensure api_keys section exists and has all keys
+            if "api_keys" not in config:
+                config["api_keys"] = {}
+            for key, value in default_config["api_keys"].items():
+                if key not in config["api_keys"]:
+                    config["api_keys"][key] = value
+            # Ensure wordlists section exists and has all keys
+            if "wordlists" not in config:
+                config["wordlists"] = {}
+            for key, value in default_config["wordlists"].items():
+                if key not in config["wordlists"]:
+                    config["wordlists"][key] = value
+            return config
     except (json.JSONDecodeError, FileNotFoundError):
-        return {"use_tor": False}
+        return default_config
 
 def save_config(config_data):
     """Sauvegarde la configuration dans config.json."""

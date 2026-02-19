@@ -1,3 +1,15 @@
 {
-    "use_tor": false
+    "use_tor": false,
+    "api_keys": {
+        "shodan": "ChwXWaZL7tRGqFxIIqapGZWCW0imJ3e4",
+        "abuseipdb": "7cab22bb3266f62e9d0f8ee4f9ebbcc18a619bba8f32b3cac584f6c2973fbafbb007ad3e08a6211b",
+        "telegram_bot_token": "7744915297:AAG4EyLewiTL559cv9fCc3fOGpQZzFGX5ug",
+        "telegram_chat_id": "1254310637"
+    },
+    "wordlists": {
+        "common_paths": "data/common_paths.txt",
+        "darkc0de_usernames": "data/darkc0de.txt",
+        "passwords": "data/passwords.txt",
+        "usernames": "data/usernames.txt"
+    }
 }

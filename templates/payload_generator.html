@@ -1,0 +1,149 @@
+{% extends "layout.html" %}
+
+{% block title %}Générateur de Payloads Web{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1 class="mb-4">Générateur de Payloads Web</h1>
+
+    <ul class="nav nav-tabs" id="payloadTabs" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" id="xss-tab" data-bs-toggle="tab" data-bs-target="#xss" type="button" role="tab" aria-controls="xss" aria-selected="true">XSS</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="sqli-tab" data-bs-toggle="tab" data-bs-target="#sqli" type="button" role="tab" aria-controls="sqli" aria-selected="false">SQL Injection</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="lfi-tab" data-bs-toggle="tab" data-bs-target="#lfi" type="button" role="tab" aria-controls="lfi" aria-selected="false">LFI</a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="android-tab" data-bs-toggle="tab" data-bs-target="#android" type="button" role="tab" aria-controls="android" aria-selected="false">Android</a>
+        </li>
+    </ul>
+
+    <div class="tab-content mt-3" id="payloadTabContent">
+        {# XSS Payload Generator #}
+        <div class="tab-pane fade show active" id="xss" role="tabpanel" aria-labelledby="xss-tab">
+            <h3 class="fw-bold">Générateur de Payload XSS</h3>
+            <form action="/payloads" method="POST">
+                <input type="hidden" name="payload_type" value="xss">
+                <div class="form-group">
+                    <label for="xss_type" class="fw-bold">Type de Payload XSS :</label>
+                    <select class="form-control" id="xss_type" name="xss_type">
+                        <option value="alert">Alert (popup simple)</option>
+                        <option value="cookie_steal">Vol de Cookie (nécessite une URL de callback)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="xss_message" class="fw-bold">Message (pour type 'alert') :</label>
+                    <input type="text" class="form-control" id="xss_message" name="xss_message" value="XSS">
+                </div>
+                <div class="form-group">
+                    <label for="xss_callback_url" class="fw-bold">URL de Callback (pour vol de cookie) :</label>
+                    <input type="url" class="form-control" id="xss_callback_url" name="xss_callback_url" placeholder="http://mon-serveur-attaquant.com/log">
+                </div>
+                <div class="form-group">
+                    <label for="xss_html_tag" class="fw-bold">Balise HTML :</label>
+                    <input type="text" class="form-control" id="xss_html_tag" name="xss_html_tag" value="script">
+                    <small class="form-text text-muted">Ex: script, img, svg/onload=</small>
+                </div>
+                <button type="submit" class="btn btn-primary">Générer Payload XSS</button>
+            </form>
+        </div>
+
+        {# SQL Injection Payload Generator #}
+        <div class="tab-pane fade" id="sqli" role="tabpanel" aria-labelledby="sqli-tab">
+            <h3 class="fw-bold">Générateur de Payload SQL Injection</h3>
+            <form action="/payloads" method="POST">
+                <input type="hidden" name="payload_type" value="sqli">
+                <div class="form-group">
+                    <label for="sqli_technique" class="fw-bold">Technique SQLi :</label>
+                    <select class="form-control" id="sqli_technique" name="sqli_technique">
+                        <option value="error">Erreur Basée</option>
+                        <option value="union">Union Based</option>
+                        <option value="blind_time">Aveugle (Temps)</option>
+                        <option value="authentication">Contournement Authentification</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="sqli_injection_point" class="fw-bold">Point d'Injection :</label>
+                    <input type="text" class="form-control" id="sqli_injection_point" name="sqli_injection_point" value="'">
+                    <small class="form-text text-muted">Caractère fermant l'injection (ex: ', ", ))</small>
+                </div>
+                <div class="form-group">
+                    <label for="sqli_data_to_extract" class="fw-bold">Données à Extraire (pour erreur/union) :</label>
+                    <input type="text" class="form-control" id="sqli_data_to_extract" name="sqli_data_to_extract" value="@@version">
+                    <small class="form-text text-muted">Ex: @@version, database(), user(), table_name</small>
+                </div>
+                <button type="submit" class="btn btn-primary">Générer Payload SQLi</button>
+            </form>
+        </div>
+
+        {# LFI Payload Generator #}
+        <div class="tab-pane fade" id="lfi" role="tabpanel" aria-labelledby="lfi-tab">
+            <h3 class="fw-bold">Générateur de Payload LFI</h3>
+            <form action="/payloads" method="POST">
+                <input type="hidden" name="payload_type" value="lfi">
+                <div class="form-group">
+                    <label for="lfi_target_file" class="fw-bold">Fichier Cible :</label>
+                    <input type="text" class="form-control" id="lfi_target_file" name="lfi_target_file" value="/etc/passwd">
+                    <small class="form-text text-muted">Ex: /etc/passwd, ../../windows/win.ini</small>
+                </div>
+                <div class="form-group">
+                    <label for="lfi_depth" class="fw-bold">Profondeur de Traversal (nombre de ../) :</label>
+                    <input type="number" class="form-control" id="lfi_depth" name="lfi_depth" value="6" min="1">
+                </div>
+                <button type="submit" class="btn btn-primary">Générer Payload LFI</button>
+            </form>
+        </div>
+
+        {# Android Payload Generator #}
+        <div class="tab-pane fade" id="android" role="tabpanel" aria-labelledby="android-tab">
+            <h3 class="fw-bold">Générateur de Payload Android</h3>
+            <form action="/payloads" method="POST">
+                <input type="hidden" name="payload_type" value="android">
+                <div class="form-group">
+                    <label for="android_lhost" class="fw-bold">LHOST (IP Attaquant) :</label>
+                    <input type="text" class="form-control" id="android_lhost" name="android_lhost" placeholder="Ex: 192.168.1.100" required>
+                    <small class="form-text text-muted">Votre adresse IP locale ou publique pour la connexion inverse.</small>
+                </div>
+                <div class="form-group">
+                    <label for="android_lport" class="fw-bold">LPORT (Port Attaquant) :</label>
+                    <input type="number" class="form-control" id="android_lport" name="android_lport" value="4444" required>
+                    <small class="form-text text-muted">Le port sur lequel votre listener Metasploit attendra la connexion.</small>
+                </div>
+                <div class="form-group">
+                    <label for="android_filename" class="fw-bold">Nom du fichier APK :</label>
+                    <input type="text" class="form-control" id="android_filename" name="android_filename" value="android_reverse_shell.apk" required>
+                    <small class="form-text text-muted">Le nom du fichier APK qui sera généré (sera placé dans 'outputs/payloads_android').</small>
+                </div>
+                <div class="form-group">
+                    <label for="android_payload_type" class="fw-bold">Type de Payload msfvenom :</label>
+                    <input type="text" class="form-control" id="android_payload_type" name="android_payload_type" value="android/meterpreter/reverse_tcp">
+                    <small class="form-text text-muted">Ex: android/meterpreter/reverse_tcp, android/shell/reverse_tcp</small>
+                </div>
+                <button type="submit" class="btn btn-primary">Générer Payload Android</button>
+            </form>
+        </div>
+    </div>
+
+    {# Display Generated Payload #}
+    {% if generated_payload %}
+    <div class="mt-5">
+        <h4 class="fw-bold">Payload Généré :</h4>
+        <textarea class="form-control" rows="5" readonly>{{ generated_payload }}</textarea>
+        <button class="btn btn-secondary mt-2" onclick="copyToClipboard()">Copier</button>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+    function copyToClipboard() {
+        var copyText = document.querySelector(".form-control[readonly]");
+        copyText.select();
+        copyText.setSelectionRange(0, 99999); /* For mobile devices */
+        document.execCommand("copy");
+        alert("Payload copié dans le presse-papiers !");
+    }
+</script>
+{% endblock %}

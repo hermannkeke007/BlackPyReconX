@@ -18,15 +18,44 @@ import requests
 import json
 import os
 import threading
-from dotenv import load_dotenv
-
-load_dotenv()
+from modules import utils # Import utils to load config
 
 # La session sera injectée par main.py
 session = None
 
-def get_api_keys():
-    return os.getenv('SHODAN_API_KEY'), os.getenv('ABUSEIPDB_API_KEY')
+# Variable globale pour stocker les résultats de géolocalisation IP-API
+ipapi_geolocation_data = {}
+
+def get_geolocation_formatted(target):
+    # Utiliser la session globale si elle est initialisée, sinon créer une session temporaire
+    current_session = session if session is not None else requests.Session()
+    
+    try:
+        response = current_session.get(f"http://ip-api.com/json/{target}?lang=fr&fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,query", timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get('status') == 'success':
+            return f"--- IP-API.COM (Géolocalisation) ---\n" \
+                   f"  Cible: {data.get('query')}\n" \
+                   f"  Pays: {data.get('country')} ({data.get('countryCode')})\n" \
+                   f"  Région: {data.get('regionName')} ({data.get('region')})\n" \
+                   f"  Ville: {data.get('city')}\n" \
+                   f"  Code Postal: {data.get('zip')}\n" \
+                   f"  Latitude: {data.get('lat')}\n" \
+                   f"  Longitude: {data.get('lon')}\n" \
+                   f"  Fuseau Horaire: {data.get('timezone')}\n" \
+                   f"  ISP: {data.get('isp')}\n" \
+                   f"  Organisation: {data.get('org')}\n" \
+                   f"  AS: {data.get('as')}\n"
+        else:
+            return f"--- IP-API.COM (Géolocalisation) ---\n" \
+                   f"  Statut: {data.get('status')}\n" \
+                   f"  Message: {data.get('message', 'N/A')}\n"
+    except requests.exceptions.RequestException as e:
+        return f"--- IP-API.COM (Géolocalisation) ---\nErreur: {e}\n"
+    except Exception as e:
+        return f"--- IP-API.COM (Géolocalisation) ---\nErreur inattendue: {e}\n"
 
 # --- Fonctions pour chaque API (pour le parallélisme) ---
 
@@ -39,15 +68,39 @@ def fetch_ipinfo(target, results_dict):
         results_dict['ipinfo'] = f"--- IPINFO.IO ---\nErreur: {e}\n"
 
 def fetch_ipapi(target, results_dict):
+    global ipapi_geolocation_data # Permettre la modification de la variable globale
     try:
-        response = session.get(f"http://ip-api.com/json/{target}", timeout=10)
+        response = session.get(f"http://ip-api.com/json/{target}?lang=fr&fields=status,message,country,countryCode,region,regionName,city,zip,lat,lon,timezone,isp,org,as,query", timeout=10)
         response.raise_for_status()
-        results_dict['ipapi'] = f"--- IP-API.COM ---\n{json.dumps(response.json(), indent=2)}\n"
+        data = response.json()
+        ipapi_geolocation_data = data # Stocker les données brutes
+        results_dict['ipapi_raw'] = data # Stocker aussi pour l'affichage brut si nécessaire
+        
+        if data.get('status') == 'success':
+            results_dict['ipapi_summary'] = f"--- IP-API.COM (Résumé Géolocalisation) ---\n" \
+                                            f"  Pays: {data.get('country')} ({data.get('countryCode')})\n" \
+                                            f"  Région: {data.get('regionName')} ({data.get('region')})\n" \
+                                            f"  Ville: {data.get('city')}\n" \
+                                            f"  Code Postal: {data.get('zip')}\n" \
+                                            f"  Latitude: {data.get('lat')}\n" \
+                                            f"  Longitude: {data.get('lon')}\n" \
+                                            f"  Fuseau Horaire: {data.get('timezone')}\n" \
+                                            f"  ISP: {data.get('isp')}\n" \
+                                            f"  Organisation: {data.get('org')}\n" \
+                                            f"  AS: {data.get('as')}\n" \
+                                            f"  IP: {data.get('query')}\n"
+        else:
+            results_dict['ipapi_summary'] = f"--- IP-API.COM (Résumé Géolocalisation) ---\n" \
+                                            f"  Statut: {data.get('status')}\n" \
+                                            f"  Message: {data.get('message', 'N/A')}\n"
+
     except requests.exceptions.RequestException as e:
-        results_dict['ipapi'] = f"--- IP-API.COM ---\nErreur: {e}\n"
+        results_dict['ipapi_summary'] = f"--- IP-API.COM (Résumé Géolocalisation) ---\nErreur: {e}\n"
+    except Exception as e:
+        results_dict['ipapi_summary'] = f"--- IP-API.COM (Résumé Géolocalisation) ---\nErreur inattendue: {e}\n"
 
 def fetch_abuseipdb(target, api_key, results_dict):
-    if not api_key or api_key == "VOTRE_CLE_API_ABUSEIPDB":
+    if not api_key: # Check for empty string
         results_dict['abuseipdb'] = "--- ABUSEIPDB.COM ---\nClé API non configurée.\n"
         return
     try:
@@ -60,7 +113,7 @@ def fetch_abuseipdb(target, api_key, results_dict):
         results_dict['abuseipdb'] = f"--- ABUSEIPDB.COM ---\nErreur: {e}\n"
 
 def fetch_shodan(target, api_key, results_dict):
-    if not api_key or api_key == "VOTRE_CLE_API_SHODAN":
+    if not api_key: # Check for empty string
         results_dict['shodan'] = "--- SHODAN.IO ---\nClé API non configurée.\n"
         return
     try:
@@ -70,11 +123,14 @@ def fetch_shodan(target, api_key, results_dict):
     except requests.exceptions.RequestException as e:
         results_dict['shodan'] = f"--- SHODAN.IO ---\nErreur: {e}\n"
 
-def run(target, session_dir):
+def run(target, session_dir, geo_flag=False):
     if session is None:
         raise Exception("La session de requêtes n'a pas été initialisée.")
 
-    shodan_api_key, abuseipdb_api_key = get_api_keys()
+    config = utils.load_config()
+    api_keys = config.get('api_keys', {})
+    shodan_api_key = api_keys.get('shodan', '')
+    abuseipdb_api_key = api_keys.get('abuseipdb', '')
     
     results = {}
     threads = []
@@ -82,7 +138,7 @@ def run(target, session_dir):
     # Créer et lancer les threads pour chaque appel API
     tasks = [
         (fetch_ipinfo, (target, results)),
-        (fetch_ipapi, (target, results)),
+        (fetch_ipapi, (target, results)), # ipapi will now store structured data in ipapi_geolocation_data
         (fetch_abuseipdb, (target, abuseipdb_api_key, results)),
         (fetch_shodan, (target, shodan_api_key, results))
     ]
@@ -98,8 +154,8 @@ def run(target, session_dir):
 
     # Assembler les résultats dans l'ordre souhaité
     final_results = (
+        results.get('ipapi_summary', '') + # Prioritize summary if available
         results.get('ipinfo', '') +
-        results.get('ipapi', '') +
         results.get('abuseipdb', '') +
         results.get('shodan', '')
     )
@@ -108,4 +164,15 @@ def run(target, session_dir):
     with open(output_path, 'w', encoding='utf-8') as f:
         f.write(final_results)
 
-    print(f"[+] Résultats OSINT enregistrés dans {output_path}")
+    # Sauvegarder les données brutes de géolocalisation pour les rapports si geo_flag est activé
+    if geo_flag and results.get('ipapi_raw'):
+        geo_json_path = os.path.join(session_dir, 'geo_results.json')
+        with open(geo_json_path, 'w', encoding='utf-8') as f:
+            json.dump(results['ipapi_raw'], f, indent=2)
+        utils.log_message('+', f"Données brutes de géolocalisation enregistrées dans {geo_json_path}")
+
+
+    if geo_flag and results.get('ipapi_summary'):
+        print(f"[+] Géolocalisation pour la cible: \n{results.get('ipapi_summary')}")
+    else:
+        print(f"[+] Résultats OSINT enregistrés dans {output_path}")

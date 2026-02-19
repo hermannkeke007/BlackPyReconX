@@ -20,7 +20,15 @@ from modules import osint, scanner, exploit_web, exploit_sys, exfiltration, repo
 console = Console()
 
 def main():
-    console.print(Panel("Framework développé par [bold cyan]Hermann KEKE[/bold cyan]", style="yellow", title="[bold green]BlackPyReconX[/bold green]", subtitle="[blue]Framework d'Attaque Complet[/blue]"))
+    console.print(Panel(
+        "Framework développé par [bold cyan]Hermann KEKE[/bold cyan]", 
+        style="bold white", 
+        title="[bold green]BlackPyReconX[/bold green]", 
+        subtitle="[blue]Framework d'Attaque Complet v1.0[/blue]",
+        border_style="bright_magenta",
+        title_align="center",
+        subtitle_align="center"
+    ))
     parser = argparse.ArgumentParser(
         description="""BlackPyReconX - Un framework d'attaque complet et modulaire pour la reconnaissance, l'analyse de vulnérabilités, l'exploitation et la post-exploitation.
         Conçu pour les tests d'intrusion éthiques, il offre une suite d'outils allant de l'OSINT au sniffer réseau, en passant par le bruteforce et la stéganographie.
@@ -49,6 +57,7 @@ def main():
         """
     )
     osint_parser.add_argument("--target", help="Cible de l'attaque (domaine ou IP)", required=True)
+    osint_parser.add_argument("--geo", action="store_true", help="Afficher les informations de géolocalisation détaillées pour la cible.")
 
     # Subparser pour Scan
     scan_parser = subparsers.add_parser(
@@ -252,7 +261,7 @@ def main():
     # Dispatch des commandes
     if args.module == "osint":
         utils.log_message('*', "Lancement du module OSINT...")
-        osint.run(args.target, session_dir)
+        osint.run(args.target, session_dir, geo_flag=args.geo)
         report_needed = True
 
     elif args.module == "scan":

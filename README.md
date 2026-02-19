@@ -3,6 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.10%2B-blue" alt="Python Version">
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License">
+  <img src="https://img.shields.io/badge/Version-1.0-blue.svg" alt="Version">
   <img src="https://img.shields.io/badge/Status-En%20D%C3%A9veloppement-orange" alt="Status">
 </p>
 
@@ -39,9 +40,7 @@ Cet outil est conçu à des fins **éducatives** et pour les **professionnels de
 *   **Exploitation & Post-Exploitation :**
     *   Attaques par force brute (Dictionnaire & Pure) sur les services `ssh`, `ftp`, `telnet`.
     *   Attaque par déni de service (TCP SYN Flood).
-    *   Génération de payload `.exe` pour Windows avec **reverse shell**, **keylogger**, et **capture d'écran**.
-
-*   **Utilitaires Spécialisés :**
+    *   Utilitaires Spécialisés :
     *   **Sniffer réseau** pour capturer le trafic en temps réel.
     *   Outils de **stéganographie** pour cacher des fichiers dans des images.
     *   Module d'**exfiltration** pour compresser et chiffrer les données collectées.
@@ -74,7 +73,7 @@ Cet outil est conçu à des fins **éducatives** et pour les **professionnels de
     ```bash
     pip install -r requirements.txt
     ```
-  **Pour utilser Tor vous devez avoir installer tor browser et être connecté(e)**
+  **Pour utiliser Tor, vous devez télécharger, exécuter et vous connecter à [Tor Browser](https://www.torproject.org/download/).**
   
 4.  **Configurez les clés API :**
     *   Copiez le fichier `.env.example` et renommez-le en `.env`.
@@ -141,14 +140,6 @@ La CLI est l'outil le plus puissant du framework.
     ```bash
     # Assurez-vous d'avoir exécuté un module comme osint, scan ou web au préalable.
     python main.py report --target exemple.com
-    ```
-
-*   **Compiler un payload de reverse shell :**
-    ```bash
-    # 1. Configurez votre IP dans modules/exploit_sys.py
-    # 2. Lancez le build
-    python build_payload.py
-    # 3. Récupérez le .exe dans le dossier /payloads
     ```
 
 ---

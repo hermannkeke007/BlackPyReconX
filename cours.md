@@ -1,4 +1,5 @@
 ### **Cours Complet sur le Framework BlackPyReconX**
+**Version : v1.0**
 
 #### **Table des Matières**
 
@@ -73,6 +74,7 @@ BlackPyReconX peut être contrôlé de trois manières différentes, pour s'adap
 *   Python 3.10 ou supérieur.
 *   L'outil de gestion de paquets `pip`.
 *   (Optionnel mais recommandé) `git` pour cloner le dépôt.
+*   **Pour utiliser les fonctionnalités de Tor :** Téléchargez, exécutez et connectez-vous à [Tor Browser](https://www.torproject.org/download/). Le navigateur Tor doit être en cours d'exécution pour que le framework puisse utiliser le réseau Tor.
 
 ##### **2.2. Procédure d'Installation**
 1.  **Cloner le dépôt :**

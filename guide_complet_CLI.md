@@ -1,6 +1,6 @@
 ### **BlackPyReconX - Manuel de l'Interface en Ligne de Commande (CLI)**
 
-**Version 1.1 - Mise à jour du 2 Février 2026**
+**Version 1.0**
 
 ---
 

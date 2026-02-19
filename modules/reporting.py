@@ -193,7 +193,23 @@ def generate_professional_report(data):
     recommandations = generate_recommendations(data)
 
     # --- 5. Annexes ---
-    annexes = f"**Résultats OSINT :**\n{data['osint_results']}\n\n**Résultats Scan Réseau :**\n{data['scan_results']}"
+    annexes = f"**Résultats OSINT :**\n{data['osint_results']}\n\n"
+    if data['geolocation_data']:
+        geo_data = data['geolocation_data']
+        annexes += f"**Géolocalisation IP (IP-API.com) :**\n" \
+                   f"  Cible: {geo_data.get('query', 'N/A')}\n" \
+                   f"  Pays: {geo_data.get('country', 'N/A')} ({geo_data.get('countryCode', 'N/A')})\n" \
+                   f"  Région: {geo_data.get('regionName', 'N/A')} ({geo_data.get('region', 'N/A')})\n" \
+                   f"  Ville: {geo_data.get('city', 'N/A')}\n" \
+                   f"  Code Postal: {geo_data.get('zip', 'N/A')}\n" \
+                   f"  Latitude: {geo_data.get('lat', 'N/A')}\n" \
+                   f"  Longitude: {geo_data.get('lon', 'N/A')}\n" \
+                   f"  Fuseau Horaire: {geo_data.get('timezone', 'N/A')}\n" \
+                   f"  ISP: {geo_data.get('isp', 'N/A')}\n" \
+                   f"  Organisation: {geo_data.get('org', 'N/A')}\n" \
+                   f"  AS: {geo_data.get('as', 'N/A')}\n\n"
+    
+    annexes += f"**Résultats Scan Réseau :**\n{data['scan_results']}"
     if 'sniffer_results' in data and data['sniffer_results'].strip() and "n'a pas été trouvé" not in data['sniffer_results']:
         annexes += f"\n\n**Résultats Capture de Paquets :**\n{data['sniffer_results']}"
 
@@ -239,6 +255,17 @@ def run(target, session_dir):
         'shell_status': "Tentative de connexion effectuée (vérifier manuellement).",
         'exfil_status': "Succès." if any(f.endswith('.zip.enc') for f in os.listdir(session_dir)) else "Non effectuée ou échec."
     }
+
+    # Charger les données de géolocalisation si disponibles
+    geo_json_path = os.path.join(session_dir, 'geo_results.json')
+    if os.path.exists(geo_json_path):
+        try:
+            with open(geo_json_path, 'r', encoding='utf-8') as f:
+                report_data['geolocation_data'] = json.load(f)
+        except (json.JSONDecodeError, FileNotFoundError):
+            report_data['geolocation_data'] = {"error": "Impossible de lire geo_results.json"}
+    else:
+        report_data['geolocation_data'] = None
 
     # Charger la configuration de branding
     try:

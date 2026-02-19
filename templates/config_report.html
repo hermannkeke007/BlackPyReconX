@@ -13,33 +13,33 @@
             
             <form id="config-form" enctype="multipart/form-data">
                 <div class="mb-3">
-                    <label for="company_name" class="form-label">Nom de l'entreprise</label>
+                    <label for="company_name" class="form-label fw-bold">Nom de l'entreprise</label>
                     <input type="text" id="company_name" name="company_name" class="form-control" value="{{ config.company_name }}">
                 </div>
                 <div class="mb-3">
-                    <label for="direction" class="form-label">Direction</label>
+                    <label for="direction" class="form-label fw-bold">Direction</label>
                     <input type="text" id="direction" name="direction" class="form-control" value="{{ config.direction }}">
                 </div>
                 <div class="mb-3">
-                    <label for="department" class="form-label">Département</label>
+                    <label for="department" class="form-label fw-bold">Département</label>
                     <input type="text" id="department" name="department" class="form-control" value="{{ config.department }}">
                 </div>
                 <hr>
                 <div class="mb-3">
-                    <label for="engineer_name" class="form-label">Nom de l'ingénieur</label>
+                    <label for="engineer_name" class="form-label fw-bold">Nom de l'ingénieur</label>
                     <input type="text" id="engineer_name" name="engineer_name" class="form-control" value="{{ config.engineer_name }}">
                 </div>
                 <div class="mb-3">
-                    <label for="engineer_contact" class="form-label">Contact de l'ingénieur</label>
+                    <label for="engineer_contact" class="form-label fw-bold">Contact de l'ingénieur</label>
                     <input type="tel" id="engineer_contact" name="engineer_contact" class="form-control" value="{{ config.engineer_contact }}">
                 </div>
                 <div class="mb-3">
-                    <label for="engineer_email" class="form-label">Email de l'ingénieur</label>
+                    <label for="engineer_email" class="form-label fw-bold">Email de l'ingénieur</label>
                     <input type="email" id="engineer_email" name="engineer_email" class="form-control" value="{{ config.engineer_email }}">
                 </div>
                 <hr>
                 <div class="mb-3">
-                    <label for="logo" class="form-label">Logo de l'entreprise (PNG, JPG)</label>
+                    <label for="logo" class="form-label fw-bold">Logo de l'entreprise (PNG, JPG)</label>
                     <input type="file" id="logo" name="logo" accept=".png, .jpg, .jpeg" class="form-control">
                     <input type="hidden" id="remove_logo" name="remove_logo" value="false">
                     <p class="mt-2">Logo actuel : <span id="current-logo">{{ config.display_logo or 'Aucun' }}</span> 
