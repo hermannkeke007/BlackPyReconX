@@ -22,6 +22,7 @@
 
 4.  **Chapitre 4 : Les Modules de Reconnaissance et de Scan**
     *   4.1. Module `osint.py` : Open Source Intelligence
+        *   **Géolocalisation IP :** Ce module peut désormais effectuer une géolocalisation IP précise (pays, région, ville, coordonnées, FAI) pour une cible donnée, affichant les résultats directement en CLI et générant un rapport détaillé. Il utilise l'API IP-API.com.
     *   4.2. Module `scanner.py` : Scan de Ports et Bannières
     *   4.3. Module `exploit_web.py` : Analyse de Vulnérabilités Web
 

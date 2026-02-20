@@ -45,20 +45,25 @@ Ces options affectent plusieurs modules ou le comportement général du framewor
 
 #### **2.1 Module OSINT (`osint`)**
 
-*   **Objectif :** Collecter des informations passivement sur une cible depuis des sources ouvertes.
-*   **Commande :**
+*   **Objectif :** Collecter des informations passivement sur une cible depuis des sources ouvertes, y compris la géolocalisation IP.
+*   **Commandes :**
     ```bash
     python main.py osint --target <cible>
+    python main.py osint --target <cible> --geo
     ```
-*   **Description :** Ce module lance des requêtes parallèles vers plusieurs API pour agréger des informations publiques (sous-domaines, adresses e-mail, enregistrements DNS, etc.).
+*   **Description :** Ce module lance des requêtes parallèles vers plusieurs API pour agréger des informations publiques (sous-domaines, adresses e-mail, enregistrements DNS, etc.). Avec l'option `--geo`, il effectue également une géolocalisation IP précise via IP-API.com et génère des rapports détaillés.
     *   **Services interrogés :** `ipinfo.io`, `ip-api.com`, `shodan.io`, `abuseipdb.com`.
     *   **Prérequis :** Les clés API pour Shodan et AbuseIPDB doivent être configurées dans le fichier `.env` pour obtenir des résultats complets.
 *   **Options :**
     *   `--target <cible>` : **(Obligatoire)** Spécifie la cible de l'audit (domaine ou IP).
-*   **Exemple d'utilisation :**
+    *   `--geo` : **(Optionnel)** Active la géolocalisation IP détaillée pour la cible et inclut les résultats dans les rapports.
+*   **Exemples d'utilisation :**
     ```bash
     # Obtenir des informations publiques sur l'adresse IP 104.21.23.21
     python main.py osint --target 104.21.23.21
+
+    # Obtenir la géolocalisation IP de example.com
+    python main.py osint --target example.com --geo
     ```
 
 #### **2.2 Module de Scan Réseau (`scan`)**

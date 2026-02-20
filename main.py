@@ -51,9 +51,10 @@ def main():
     osint_parser = subparsers.add_parser(
         "osint", 
         help="""
-        Lance le module de reconnaissance en sources ouvertes (OSINT).
+        Lance le module de reconnaissance en sources ouvertes (OSINT), y compris la géolocalisation IP.
         Ce module collecte des informations publiques sur une cible, telles que les sous-domaines,
-        les adresses e-mail associées, les enregistrements DNS et d'autres données exposées.
+        les adresses e-mail associées, les enregistrements DNS et d'autres données exposées,
+        et peut géolocaliser une adresse IP ou un domaine.
         """
     )
     osint_parser.add_argument("--target", help="Cible de l'attaque (domaine ou IP)", required=True)

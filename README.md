@@ -30,6 +30,7 @@ Cet outil est conçu à des fins **éducatives** et pour les **professionnels de
 
 *   **Reconnaissance & OSINT :**
     *   Agrégation d'informations depuis `ipinfo.io`, `Shodan`, `AbuseIPDB`, etc.
+    *   **Géolocalisation IP** précise (pays, région, ville, coordonnées) pour toute adresse IP ou domaine.
 
 *   **Scan & Analyse :**
     *   Scan de ports multi-thread rapide.
@@ -98,6 +99,11 @@ La CLI est l'outil le plus puissant du framework.
 *   **Lancer une reconnaissance OSINT sur une cible :**
     ```bash
     python main.py osint --target exemple.com
+    ```
+
+*   **Obtenir la géolocalisation IP d'une cible :**
+    ```bash
+    python main.py osint --target 8.8.8.8 --geo
     ```
 
 *   **Lancer un scan de ports sur une cible en utilisant Tor :**
