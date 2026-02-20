@@ -63,7 +63,7 @@ else:
 if not os.path.exists(INSTALL_MARKER_FILE):
     print("[*] Première exécution détectée. Installation des dépendances...")
     try:
-        subprocess.check_call([PYTHON_EXECUTABLE, "-m", "pip", "install", "-r", "requirements.txt"])
+        subprocess.check_call([PYTHON_EXECUTABLE, "-m", "pip", "install", "-r", "requirements.txt"], stdout=sys.stdout, stderr=sys.stderr)
         with open(INSTALL_MARKER_FILE, 'w') as f:
             f.write("Dependencies installed on " + time.ctime())
         print("[+] Dépendances installées avec succès.")
