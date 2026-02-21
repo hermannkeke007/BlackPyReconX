@@ -88,7 +88,7 @@ BlackPyReconX peut être contrôlé de trois manières différentes, pour s'adap
     ```bash
     python -m venv venv
     # Sur Windows
-    venv\Scripts\activate
+    .venv\Scripts\activate
     # Sur macOS/Linux
     source venv/bin/activate
     ```
