@@ -19,7 +19,45 @@ import time
 import sys
 import json
 import os
-from modules import utils # Import utils
+
+# --- Détermination de l'exécutable Python ---
+# Ce bloc doit être exécuté avant toute tentative d'installation de dépendances.
+VENV_PATH = os.path.join(os.path.dirname(__file__), 'venv')
+PYTHON_EXECUTABLE = os.path.join(VENV_PATH, 'Scripts', 'python.exe') if sys.platform == 'win32' else os.path.join(VENV_PATH, 'bin', 'python')
+
+# Fallback si l'environnement virtuel n'est pas trouvé, utiliser l'interpréteur courant
+if not os.path.exists(PYTHON_EXECUTABLE):
+    PYTHON_EXECUTABLE = sys.executable
+
+# --- Vérification et installation des dépendances ---
+# Ce bloc est placé au début pour s'assurer que les modules sont disponibles avant leur importation.
+print("[*] Installation/mise à jour des dépendances. Cela peut prendre un certain temps...")
+try:
+    # Utiliser --quiet pour une sortie moins verbeuse, sauf en cas d'erreur.
+    # Rediriger la sortie standard vers DEVNULL pour ne pas polluer la console en cas de succès.
+    subprocess.check_call([PYTHON_EXECUTABLE, "-m", "pip", "install", "-r", "requirements.txt"])
+    print("[+] Les dépendances sont à jour.")
+except subprocess.CalledProcessError as e:
+    print(f"[-] Erreur lors de l'installation des dépendances. Pip a retourné le code {e.returncode}.")
+    print("[-] Le programme ne peut pas continuer. Essayez d'exécuter 'pip install -r requirements.txt' manuellement.")
+    sys.exit(1)
+except Exception as e:
+    print(f"[-] Une erreur inattendue est survenue lors de la vérification des dépendances: {e}")
+    sys.exit(1)
+
+
+# --- Importations des modules externes (APRÈS l'installation) ---
+try:
+    from dotenv import load_dotenv, set_key, find_dotenv
+    from modules import utils
+except ImportError as e:
+    print(f"[-] Erreur d'importation après l'installation : {e}")
+    print("[-] Un module requis est manquant même après la tentative d'installation.")
+    print("[-] Assurez-vous que le module est listé dans 'requirements.txt' et qu'il n'y a pas eu d'erreur ci-dessus.")
+    sys.exit(1)
+
+# Charger les variables d'environnement depuis le fichier .env
+load_dotenv(find_dotenv())
 
 # --- INSTRUCTIONS POUR L'ENVIRONNEMENT VIRTUEL (VENV) ---
 # Il est FORTEMENT recommandé d'utiliser un environnement virtuel Python (venv)
@@ -40,42 +78,16 @@ from modules import utils # Import utils
 
 # --- CONFIGURATION ---
 STATUS_FILE = 'status.json'
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json') # Path to config.json
-INSTALL_MARKER_FILE = '.first_run_done'
+CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
 
-# Déterminer le chemin vers les exécutables Python et Flask de l'environnement virtuel
-VENV_PATH = os.path.join(os.path.dirname(__file__), 'venv')
-PYTHON_EXECUTABLE = os.path.join(VENV_PATH, 'Scripts', 'python.exe') if sys.platform == 'win32' else os.path.join(VENV_PATH, 'bin', 'python')
+# --- Détermination de la commande Flask ---
 FLASK_EXECUTABLE = os.path.join(VENV_PATH, 'Scripts', 'flask.exe') if sys.platform == 'win32' else os.path.join(VENV_PATH, 'bin', 'flask')
-
-# Fallback si l'environnement virtuel n'est pas trouvé ou structuré différemment
-if not os.path.exists(PYTHON_EXECUTABLE):
-    PYTHON_EXECUTABLE = sys.executable # Utiliser l'interpréteur Python actuel
-    print("[!] Avertissement: Environnement virtuel 'venv' non trouvé ou structure inattendue. Utilisation de l'interpréteur Python actuel. Assurez-vous que Flask est installé globalement ou que vous exécutez 'start_all.py' depuis un environnement virtuel activé.")
 if not os.path.exists(FLASK_EXECUTABLE):
-    # Si 'flask.exe' n'est pas directement présent, on utilise 'python -m flask'
-    # mais en s'assurant que le bon interpréteur Python est utilisé.
     FLASK_COMMAND_PREFIX = [PYTHON_EXECUTABLE, "-m", "flask"]
+    if not os.path.exists(os.path.join(VENV_PATH, 'Scripts')):
+         print("[!] Avertissement: Environnement virtuel 'venv' non trouvé ou structure inattendue. Utilisation de l'interpréteur Python système. Assurez-vous que Flask est installé ou que vous exécutez 'start_all.py' depuis un environnement virtuel activé.")
 else:
     FLASK_COMMAND_PREFIX = [FLASK_EXECUTABLE]
-
-# --- Installation des dépendances si c'est la première exécution ---
-if not os.path.exists(INSTALL_MARKER_FILE):
-    print("[*] Première exécution détectée. Installation des dépendances...")
-    try:
-        subprocess.check_call([PYTHON_EXECUTABLE, "-m", "pip", "install", "-r", "requirements.txt"], stdout=sys.stdout, stderr=sys.stderr)
-        with open(INSTALL_MARKER_FILE, 'w') as f:
-            f.write("Dependencies installed on " + time.ctime())
-        print("[+] Dépendances installées avec succès.")
-    except subprocess.CalledProcessError as e:
-        print(f"[-] Erreur lors de l'installation des dépendances: {e}")
-        print("[-] Veuillez installer manuellement les dépendances en exécutant : pip install -r requirements.txt")
-        sys.exit(1)
-    except Exception as e:
-        print(f"[-] Une erreur inattendue est survenue lors de l'installation des dépendances: {e}")
-        sys.exit(1)
-else:
-    print("[*] Dépendances déjà installées. Démarrage du framework...")
 
 
 def set_bot_status(status: str):
@@ -89,64 +101,92 @@ def set_bot_status(status: str):
 def main():
     processes = []
     
-    config = utils.load_config()
-    api_keys = config.get('api_keys', {})
+    # API keys are now read from .env directly
     required_keys = ['shodan', 'abuseipdb', 'telegram_bot_token', 'telegram_chat_id']
     
-    is_configured = True
+    # Check initial configuration status
+    initial_is_configured = True
     for key in required_keys:
-        if not api_keys.get(key):
-            is_configured = False
+        if not utils.get_api_key(key):
+            initial_is_configured = False
             break
 
-    if not is_configured:
-        print("[!] Clés API non configurées. Lancement de l'interface web pour la configuration initiale.")
-        print("[*] Veuillez ouvrir votre navigateur et accéder à http://127.0.0.1:5000 pour configurer les clés API.")
-        print("\n[!] Pour utiliser les fonctionnalités de Tor (anonymisation du trafic), assurez-vous d'avoir téléchargé, exécuté et connecté [Tor Browser](https://www.torproject.org/download/). Il doit être en cours d'exécution pour que le framework puisse utiliser le réseau Tor.")
-        
-        web_command = FLASK_COMMAND_PREFIX + ["--app", "app", "run"] # Removed debug flag here
-        proc = subprocess.Popen(web_command)
-        processes.append(proc)
-        
-        print("\n[!] L'application attend la configuration des clés API via l'interface web.")
-        print("[*] Une fois configurées, le bot Telegram et le CLI seront également fonctionnels.")
-        print("\nAppuyez sur Ctrl+C pour arrêter le serveur web.")
+    if not initial_is_configured:
+        print("\n" + "#" * 70)
+        print("[!] --- CONFIGURATION DES CLÉS API ---")
+        print("[!] Des clés API essentielles sont manquantes ou vides dans votre fichier '.env'.")
+        print("[!] Veuillez les saisir ci-dessous pour continuer.")
+        print("[!] (Les valeurs seront sauvegardées dans votre fichier '.env' localement.)")
+        print("#" * 70 + "\n")
 
-    else:
+        dotenv_path = find_dotenv()
+        if not dotenv_path: 
+            dotenv_path = '.env'
+            with open(dotenv_path, 'w') as f:
+                f.write("# Environment variables for BlackPyReconX\n")
+        
+        for key in required_keys:
+            current_value = utils.get_api_key(key)
+            if not current_value:
+                value = input(f"Entrez la clé API pour {key.upper()}: ")
+                if value:
+                    set_key(dotenv_path, key.upper(), value)
+                    print(f"[+] Clé {key.upper()} sauvegardée dans .env.")
+                else:
+                    print(f"[-] La clé {key.upper()} n'a pas été renseignée. Le programme pourrait ne pas fonctionner correctement.")
+        
+        load_dotenv(find_dotenv(), override=True)
+        
+        is_configured = True # Re-evaluate after prompts
+        for key in required_keys:
+            if not utils.get_api_key(key):
+                is_configured = False
+                break
+        
+        if not is_configured: # Still not configured after prompt
+            print("\n[!] Toutes les clés API requises n'ont pas été configurées. Le programme pourrait rencontrer des erreurs.")
+            print("[!] Veuillez relancer le script après avoir complété le fichier .env si nécessaire.")
+            sys.exit(1)
+        else: # Now configured, proceed to launch
+            print("\n[+] Toutes les clés API ont été configurées. Le programme va démarrer.")
+        
+        print("\n[!] Pour utiliser les fonctionnalités de Tor (anonymisation du trafic), assurez-vous d'avoir téléchargé, exécuté et connecté [Tor Browser](https://www.torproject.org/download/). Il doit être en cours d'exécution pour que le framework puisse utiliser le réseau Tor.")
+        print("#" * 70 + "\n")
+        
+    else: # Initial check determined it was configured
+        is_configured = True # Use this variable for the rest of the main function if needed
         print("[+] Clés API configurées. Lancement de l'interface web et du bot Telegram.")
         print("[*] Le bot Telegram et le CLI sont prêts à fonctionner avec les clés configurées.")
         
-        commands = {
-            "Interface Web (Flask)": FLASK_COMMAND_PREFIX + ["--app", "app", "run"], # Use simple run for production-like
-            "Bot Telegram": [PYTHON_EXECUTABLE, os.path.join("modules", "telegram_bot.py")]
-        }
+    # --- Service Launch Logic (moved outside the if/else for initial_is_configured) ---
+    commands = {
+        "Interface Web (Flask)": FLASK_COMMAND_PREFIX + ["--app", "app", "run"],
+        "Bot Telegram": [PYTHON_EXECUTABLE, os.path.join("modules", "telegram_bot.py")]
+    }
 
-        # Indiquer que le bot est en cours de démarrage
-        set_bot_status('active')
+    set_bot_status('active')
 
-        # Lancer chaque commande dans un nouveau processus
-        for name, cmd in commands.items():
-            print(f"  -> Démarrage de : {name}")
-            if name == "Bot Telegram":
-                bot_log_path = os.path.join(os.path.dirname(__file__), "telegram_bot.log")
-                print(f"     (Les logs du bot Telegram seront écrits dans : {bot_log_path})")
-                try:
-                    with open(bot_log_path, "w") as bot_log_file:
-                        proc = subprocess.Popen(cmd, stdout=bot_log_file, stderr=subprocess.STDOUT, text=True)
-                    processes.append(proc)
-                except OSError as e:
-                    print(f"[-] Erreur lors du lancement du bot Telegram : {e}")
-                    print("    Veuillez vous assurer que Python est correctement configuré et que l'environnement virtuel est activé.")
-                    # Don't append to processes if it failed to launch
-            else:
-                proc = subprocess.Popen(cmd)
+    for name, cmd in commands.items():
+        print(f"  -> Démarrage de : {name}")
+        if name == "Bot Telegram":
+            bot_log_path = os.path.join(os.path.dirname(__file__), "telegram_bot.log")
+            print(f"     (Les logs du bot Telegram seront écrits dans : {bot_log_path})")
+            try:
+                with open(bot_log_path, "w") as bot_log_file:
+                    proc = subprocess.Popen(cmd, stdout=bot_log_file, stderr=subprocess.STDOUT, text=True)
                 processes.append(proc)
-            time.sleep(2) # Give services a moment to start
+            except OSError as e:
+                print(f"[-] Erreur lors du lancement du bot Telegram : {e}")
+                print("    Veuillez vous assurer que Python est correctement configuré et que l'environnement virtuel est activé.")
+        else:
+            proc = subprocess.Popen(cmd)
+            processes.append(proc)
+        time.sleep(2)
 
-        print("\n[+] Tous les services sont démarrés.")
-        print("[*] L'interface web est disponible sur http://127.0.0.1:5000")
-        print("[*] Le bot Telegram est en ligne.")
-        print("\nAppuyez sur Ctrl+C pour tout arrêter.")
+    print("\n[+] Tous les services sont démarrés.")
+    print("[*] L'interface web est disponible sur http://127.0.0.1:5000")
+    print("[*] Le bot Telegram est en ligne.")
+    print("\nAppuyez sur Ctrl+C pour tout arrêter.")
 
     try:
         while True:

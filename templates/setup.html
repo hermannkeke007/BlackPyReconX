@@ -97,76 +97,78 @@
 </head>
 <body>
     <div class="container">
-        <h1>Bienvenue sur BlackPyReconX !</h1>
-        <p>Veuillez configurer vos clés API pour utiliser toutes les fonctionnalités de l'application.</p>
+        <h1>Configuration des Clés API</h1>
+        <p>Les clés API essentielles ne sont pas configurées. Veuillez suivre les étapes ci-dessous :</p>
+
         <div style="background-color: #495057; padding: 15px; border-radius: 5px; margin-bottom: 20px; text-align: left; color: #ffffff;">
-            <strong>Important pour Tor :</strong> Pour utiliser les fonctionnalités de Tor (anonymisation du trafic), vous devez télécharger, exécuter et vous connecter à 
-            <a href="https://www.torproject.org/download/" target="_blank" style="color: #4CAF50;">Tor Browser</a>. 
-            Le navigateur Tor doit être en cours d'exécution avant de lancer le framework pour que le proxy soit disponible.
+            <strong>1. Créez un fichier `.env` :</strong> Copiez le fichier `<b>.env.example</b>` vers un nouveau fichier nommé `<b>.env</b>` à la racine du projet.
+            <br><br>
+            <strong>2. Remplissez vos clés API :</strong> Ouvrez le fichier `<b>.env</b>` et remplacez les valeurs `VOTRE_CLE_API...` par vos **vraies clés API**.
+            <br>
+            Ex: `SHODAN_API_KEY="votre_clé_shodan_ici"`
+            <br><br>
+            <strong>3. Redémarrez le framework :</strong> Une fois le fichier `.env` configuré, relancez `python start_all.py` dans votre terminal.
         </div>
-        <form id="apiConfigForm" action="/setup" method="POST">
-            <div class="form-group">
-                <label for="shodan_api_key">Clé API Shodan</label>
-                <input type="text" id="shodan_api_key" name="shodan" value="{{ config.api_keys.shodan or '' }}" placeholder="Entrez votre clé API Shodan">
-            </div>
-            <div class="form-group">
-                <label for="abuseipdb_api_key">Clé API AbuseIPDB</label>
-                <input type="text" id="abuseipdb_api_key" name="abuseipdb" value="{{ config.api_keys.abuseipdb or '' }}" placeholder="Entrez votre clé API AbuseIPDB">
-            </div>
-            <div class="form-group">
-                <label for="telegram_bot_token">Token du Bot Telegram</label>
-                <input type="text" id="telegram_bot_token" name="telegram_bot_token" value="{{ config.api_keys.telegram_bot_token or '' }}" placeholder="Entrez le token de votre bot Telegram">
-            </div>
-            <div class="form-group">
-                <label for="telegram_chat_id">ID du Chat Telegram</label>
-                <input type="text" id="telegram_chat_id" name="telegram_chat_id" value="{{ config.api_keys.telegram_chat_id or '' }}" placeholder="Entrez l'ID du chat Telegram">
-            </div>
-            <button type="submit">Sauvegarder la Configuration</button>
-        </form>
+
+        <div style="margin-bottom: 20px; text-align: left;">
+            <p><strong>Statut actuel de vos clés API dans `.env` :</strong></p>
+            <ul>
+                {% for key, configured in env_status.items() %}
+                    <li>{{ key.upper() }}: 
+                        {% if configured %}
+                            <span style="color: green;">Configuré</span>
+                        {% else %}
+                            <span style="color: red;">Manquant/Vide</span>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+        
+        {% if not all_configured %}
+        <button id="recheckStatusButton" class="btn btn-primary">J'ai configuré .env, Vérifier le statut</button>
+        {% else %}
+        <p style="color: green; font-weight: bold;">Toutes les clés API sont configurées ! Vous pouvez maintenant redémarrer le framework pour continuer.</p>
+        <button id="goToDashboardButton" class="btn btn-primary" onclick="window.location.href='/'">Accéder au Tableau de Bord</button>
+        {% endif %}
+
         <div id="message" class="message" style="display:none;"></div>
     </div>
 
     <script>
-        document.getElementById('apiConfigForm').addEventListener('submit', async function(event) {
-            event.preventDefault();
-
-            const form = event.target;
-            const formData = new FormData(form);
-            const data = Object.fromEntries(formData.entries());
-
-            const messageDiv = document.getElementById('message');
-            messageDiv.style.display = 'none';
-
-            try {
-                const response = await fetch(form.action, {
-                    method: form.method,
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(data)
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    messageDiv.className = 'message success';
-                    messageDiv.textContent = result.message;
-                    messageDiv.style.display = 'block';
-                    if (result.redirect_to_index) {
-                        window.location.href = '/'; 
+        const recheckButton = document.getElementById('recheckStatusButton');
+        if (recheckButton) {
+            recheckButton.addEventListener('click', async function() {
+                const messageDiv = document.getElementById('message');
+                messageDiv.style.display = 'none';
+                try {
+                    const response = await fetch('/setup', {
+                        method: 'POST', // Use POST to trigger the recheck logic
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({}) // Empty body as no data to send
+                    });
+                    const result = await response.json();
+                    if (response.ok) {
+                        messageDiv.className = 'message info';
+                        messageDiv.textContent = result.message;
+                        messageDiv.style.display = 'block';
+                        // Refresh the page to show updated status from .env
+                        setTimeout(() => {
+                            window.location.reload(); 
+                        }, 1000); 
+                    } else {
+                        messageDiv.className = 'message error';
+                        messageDiv.textContent = result.error || 'Erreur lors de la vérification.';
+                        messageDiv.style.display = 'block';
                     }
-                } else {
+                } catch (error) {
+                    console.error('Error:', error);
                     messageDiv.className = 'message error';
-                    messageDiv.textContent = result.error || 'Erreur lors de la sauvegarde.';
+                    messageDiv.textContent = 'Une erreur réseau est survenue.';
                     messageDiv.style.display = 'block';
                 }
-            } catch (error) {
-                console.error('Error:', error);
-                messageDiv.className = 'message error';
-                messageDiv.textContent = 'Une erreur réseau est survenue.';
-                messageDiv.style.display = 'block';
-            }
-        });
+            });
+        }
     </script>
 </body>
 </html>

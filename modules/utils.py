@@ -21,6 +21,10 @@ import requests
 import socket
 import socks
 from rich.console import Console
+from dotenv import load_dotenv, find_dotenv
+
+# Charger les variables d'environnement depuis le fichier .env
+load_dotenv(find_dotenv())
 
 console = Console()
 
@@ -48,12 +52,7 @@ def load_config():
     """Charge la configuration depuis config.json."""
     default_config = {
         "use_tor": False,
-        "api_keys": {
-            "shodan": "",
-            "abuseipdb": "",
-            "telegram_bot_token": "",
-            "telegram_chat_id": ""
-        },
+        # Les clés API ne sont plus stockées ici, mais dans .env
         "wordlists": {
             "common_paths": "data/common_paths.txt",
             "darkc0de_usernames": "data/darkc0de.txt",
@@ -63,17 +62,17 @@ def load_config():
     }
     
     if not os.path.exists(CONFIG_FILE):
+        # Enregistre un fichier de config par défaut sans clés API
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(default_config, f, indent=4)
         return default_config
     try:
         with open(CONFIG_FILE, 'r') as f:
             config = json.load(f)
-            # Ensure api_keys section exists and has all keys
-            if "api_keys" not in config:
-                config["api_keys"] = {}
-            for key, value in default_config["api_keys"].items():
-                if key not in config["api_keys"]:
-                    config["api_keys"][key] = value
-            # Ensure wordlists section exists and has all keys
+            # Nettoyer l'ancienne section api_keys si elle existe
+            if "api_keys" in config:
+                del config["api_keys"]
+            # S'assurer que la section wordlists existe et a toutes les clés
             if "wordlists" not in config:
                 config["wordlists"] = {}
             for key, value in default_config["wordlists"].items():
@@ -83,10 +82,15 @@ def load_config():
     except (json.JSONDecodeError, FileNotFoundError):
         return default_config
 
+
 def save_config(config_data):
     """Sauvegarde la configuration dans config.json."""
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config_data, f, indent=4)
+
+def get_api_key(key_name):
+    """Récupère une clé API depuis les variables d'environnement."""
+    return os.getenv(key_name.upper(), "") # Utilisez .upper() car les clés .env sont souvent en majuscules
 
 def get_requests_session(force_tor=None):
     """

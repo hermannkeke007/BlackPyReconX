@@ -496,7 +496,7 @@ async def stegano_run_reveal(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 def run():
     config = utils.load_config()
-    TOKEN = config['api_keys'].get("telegram_bot_token")
+    TOKEN = utils.get_api_key("telegram_bot_token")
     if not TOKEN:
         utils.log_message('-', "Le token du bot Telegram n'est pas configuré dans config.json.")
         return

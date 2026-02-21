@@ -24,6 +24,7 @@ import datetime
 import logging
 import threading 
 import time
+import shutil # Added for robust directory deletion
 
 VERSION = "1.0" # Définir la version ici
 
@@ -60,27 +61,7 @@ def add_header(response):
     response.headers['Expires'] = '0'
     return response
 
-@app.before_request
-def check_api_keys():
-    # Exclure les routes statiques et la route de setup elle-même
-    if request.endpoint == 'static' or request.path == '/setup' or request.path.startswith('/static/'):
-        return
 
-    config = utils.load_config()
-    api_keys = config.get('api_keys', {})
-
-    # On considère que la configuration est "incomplète" si une clé essentielle est vide
-    # Note: Telegram keys might be optional depending on feature usage, but we'll include them for initial setup completeness.
-    required_keys = ['shodan', 'abuseipdb', 'telegram_bot_token', 'telegram_chat_id']
-    
-    missing_key = False
-    for key in required_keys:
-        if not api_keys.get(key): # Check if key is missing or its value is empty
-            missing_key = True
-            break
-    
-    if missing_key:
-        return redirect(url_for('setup_page'))
 
 # --- ROUTES DE L'INTERFACE WEB (Nouvelle Structure) ---
 
@@ -88,30 +69,6 @@ def check_api_keys():
 def index():
     """Affiche le tableau de bord principal."""
     return render_template('index.html')
-
-@app.route('/setup', methods=['GET', 'POST'])
-def setup_page():
-    if request.method == 'POST':
-        data = request.get_json()
-        config = utils.load_config()
-        
-        # Mettre à jour les clés API
-        if 'api_keys' not in config:
-            config['api_keys'] = {}
-        
-        config['api_keys']['shodan'] = data.get('shodan', '')
-        config['api_keys']['abuseipdb'] = data.get('abuseipdb', '')
-        config['api_keys']['telegram_bot_token'] = data.get('telegram_bot_token', '')
-        config['api_keys']['telegram_chat_id'] = data.get('telegram_chat_id', '')
-
-        utils.save_config(config)
-        flash("Configuration API sauvegardée avec succès ! Le bot Telegram et le CLI sont maintenant fonctionnels.", "success")
-        return jsonify({'message': 'Configuration des clés API sauvegardée avec succès.', 'redirect_to_index': True})
-    else:
-        # GET request: Display the setup form
-        config = utils.load_config()
-        # Pass the config to the template to pre-fill existing values
-        return render_template('setup.html', config=config)
 
 @app.route('/recon')
 def recon():
@@ -180,7 +137,7 @@ def run_module():
             if module_name == 'osint':
                 osint.session = utils.get_requests_session(force_tor=use_tor_flag)
                 # Shodan API key should be passed to osint module
-                osint.SHODAN_API_KEY = config['api_keys'].get('shodan')
+                osint.SHODAN_API_KEY = utils.get_api_key('shodan')
             elif module_name == 'web':
                 exploit_web.session = utils.get_requests_session(force_tor=use_tor_flag)
 
@@ -567,40 +524,67 @@ def list_reports():
 
 @app.route('/api/report/delete', methods=['POST'])
 def delete_report():
-    """Supprime un ou plusieurs fichiers de rapport."""
+    """Supprime un ou plusieurs fichiers ou dossiers de rapport."""
     data = request.get_json()
-    filenames = data.get('filenames') # The frontend sends a list of filenames.
+    filenames = data.get('filenames')
 
     if not filenames or not isinstance(filenames, list):
-        return jsonify({'error': 'Nom de fichier manquant'}), 400
+        return jsonify({'error': 'La liste de noms de fichiers est manquante ou invalide.'}), 400
 
     errors = []
     success_count = 0
+    
+    # Obtenir le chemin absolu et résolu du dossier de base pour la comparaison
+    real_outputs_dir = os.path.realpath(OUTPUTS_DIR)
+
     for filename in filenames:
-        safe_filename = secure_filename(filename)
-        if safe_filename != filename:
-            errors.append(f"'{filename}' est un nom de fichier invalide.")
+        # Valider que le nom de fichier ne contient pas de caractères de traversée de répertoire "absolus"
+        if '..' in filename.split(os.path.sep):
+            errors.append(f"'{filename}' contient des caractères invalides ('..').")
             continue
 
-        file_path = os.path.join(OUTPUTS_DIR, safe_filename)
+        # Construire le chemin complet et le résoudre
+        file_path = os.path.join(real_outputs_dir, filename)
+        real_file_path = os.path.realpath(file_path)
 
-        if os.path.exists(file_path):
+        # Vérification de sécurité : s'assurer que le chemin est bien dans le dossier outputs
+        if not real_file_path.startswith(real_outputs_dir):
+            errors.append(f"Accès non autorisé pour le fichier '{filename}'.")
+            continue
+
+        if os.path.exists(real_file_path):
             try:
-                os.remove(file_path)
-                success_count += 1
-            except Exception as e:
-                errors.append(f"Erreur lors de la suppression de {safe_filename}: {e}")
-        else:
-            # This case might not be an "error" if multiple users are deleting files, but for now it is.
-            errors.append(f"Fichier non trouvé: {safe_filename}")
+                if os.path.isfile(real_file_path):
+                    os.remove(real_file_path)
+                    success_count += 1
+                    app.logger.info(f"Fichier supprimé: {real_file_path}")
+                    
+                    # Tenter de supprimer le dossier parent s'il est vide
+                    parent_dir = os.path.dirname(real_file_path)
+                    if parent_dir != real_outputs_dir and not os.listdir(parent_dir):
+                        os.rmdir(parent_dir)
+                        app.logger.info(f"Dossier parent vide supprimé: {parent_dir}")
 
-    if success_count == len(filenames):
+                elif os.path.isdir(real_file_path):
+                    shutil.rmtree(real_file_path)
+                    success_count += 1
+                    app.logger.info(f"Dossier supprimé: {real_file_path}")
+                else:
+                    errors.append(f"'{filename}' n'est ni un fichier ni un dossier valide.")
+
+            except Exception as e:
+                app.logger.error(f"Erreur lors de la suppression de '{real_file_path}': {e}", exc_info=True)
+                errors.append(f"Erreur lors de la suppression de {filename}: {e}")
+        else:
+            errors.append(f"Fichier ou dossier non trouvé: {filename}")
+
+    if not errors:
         plural = 's' if success_count > 1 else ''
-        return jsonify({'message': f'{success_count} fichier{plural} supprimé{plural} avec succès.'})
+        return jsonify({'message': f'{success_count} élément{plural} supprimé{plural} avec succès.'})
     elif success_count > 0:
-        return jsonify({'message': f'{success_count} fichier(s) supprimé(s), mais {len(errors)} erreur(s): {"; ".join(errors)}'})
+        return jsonify({'message': f'{success_count} élément(s) supprimé(s), mais {len(errors)} erreur(s) sont survenues: {"; ".join(errors)}'}), 207 # Multi-Status
     else:
-        return jsonify({'error': f'Aucun fichier n\'a été supprimé. Erreurs: {"; ".join(errors)}'}), 500
+        return jsonify({'error': f'Échec de la suppression. Erreurs: {"; ".join(errors)}'}), 500
 
 @app.route('/api/osint/geo', methods=['POST'])
 def get_geo_info():
