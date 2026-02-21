@@ -81,7 +81,7 @@ BlackPyReconX peut être contrôlé de trois manières différentes, pour s'adap
 ##### **2.2. Procédure d'Installation**
 1.  **Cloner le dépôt :**
     ```bash
-    git clone <URL_DU_PROJET>
+    git clone https://github.com/hermannkeke007/BlackPyReconX.git
     cd BlackPyReconX
     ```
 2.  **Créer et activer un environnement virtuel (fortement recommandé) :**
