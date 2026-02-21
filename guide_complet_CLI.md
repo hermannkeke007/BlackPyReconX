@@ -6,6 +6,16 @@
 
 ### **Page 1 : Introduction à la CLI et Commandes de Base**
 
+### **Prérequis Rapides**
+
+*   **Python 3.10+** est requis.
+*   L'utilisation d'un **environnement virtuel (`venv`)** est fortement recommandée.
+*   **Installation des dépendances :** Le script `start_all.py` gère automatiquement l'installation/mise à jour des dépendances Python au démarrage.
+*   **Configuration des clés API :** `start_all.py` vous guidera pour configurer les clés API si elles sont manquantes. Les clés requises sont : `SHODAN_API_KEY`, `ABUSEIPDB_API_KEY`, `TELEGRAM_BOT_TOKEN`, et `TELEGRAM_CHAT_ID`. Elles seront sauvegardées dans le fichier `.env`.
+*   **Tor :** Pour les fonctionnalités utilisant Tor, assurez-vous que [Tor Browser](https://www.torproject.org/download/) est en cours d'exécution.
+
+---
+
 #### **1.1 Philosophie de la CLI**
 
 L'interface en ligne de commande (CLI) de BlackPyReconX, accessible via `main.py`, est le cœur du framework. Elle est conçue pour la **puissance, la rapidité et l'automatisation**. Contrairement à l'interface web, la CLI vous donne un accès direct et granulaire à toutes les options de chaque module, ce qui la rend idéale pour les scénarios suivants :

@@ -21,6 +21,21 @@ Cet outil est conçu à des fins **éducatives** et pour les **professionnels de
 
 ---
 
+## 🐍 Prérequis Python
+
+Assurez-vous d'avoir Python **3.10 ou une version plus récente** installée sur votre système.
+
+Il est fortement recommandé d'utiliser un environnement virtuel (`venv`) pour gérer les dépendances du projet. Cela permet d'isoler les dépendances du projet des autres projets Python de votre système et d'éviter les conflits.
+
+Pour vérifier votre version de Python :
+```bash
+python --version
+# ou
+python3 --version
+```
+
+---
+
 ## ✨ Fonctionnalités Principales
 
 *   **Interfaces Multiples :**
@@ -70,16 +85,13 @@ Cet outil est conçu à des fins **éducatives** et pour les **professionnels de
     source venv/bin/activate
     ```
 
-3.  **Installez les dépendances :**
-    ```bash
-    pip install -r requirements.txt
-    ```
+**Note:** Les dépendances seront automatiquement installées ou mises à jour au premier lancement de `start_all.py`.
+
   **Pour utiliser Tor, vous devez télécharger, exécuter et vous connecter à [Tor Browser](https://www.torproject.org/download/).**
   
-4.  **Configurez les clés API :**
-    *   Copiez le fichier `.env.example` et renommez-le en `.env`.
-    *   Ouvrez le fichier `.env` et remplissez les clés API requises (Shodan, AbuseIPDB, Telegram).
-5.  **Créer un dossier nommé "outputs" dans la racine du projet :**
+3.  **Configurez les clés API :**
+    Au premier lancement de `start_all.py`, si le fichier `.env` est manquant ou si des clés API sont vides, le script vous guidera pour les configurer. Les clés API requises sont : `SHODAN_API_KEY`, `ABUSEIPDB_API_KEY`, `TELEGRAM_BOT_TOKEN`, et `TELEGRAM_CHAT_ID`. Le fichier `.env` sera créé automatiquement si nécessaire.
+    Vous pouvez également éditer manuellement le fichier `.env` si vous le souhaitez. Un exemple est fourni dans `.env.example`.
 ---
 
 ## 🕹️ Guide d'Utilisation Rapide
@@ -87,6 +99,7 @@ Cet outil est conçu à des fins **éducatives** et pour les **professionnels de
 ### Lancement des Services
 
 Pour lancer l'interface web et le bot Telegram simultanément :
+**Note:** `start_all.py` vérifie et installe automatiquement les dépendances requises avant de lancer les services.
 ```bash
 python start_all.py
 ```
@@ -177,7 +190,7 @@ BlackPyReconX/
 Voici quelques-unes des fonctionnalités prévues pour les futures versions :
 
 -   [ ] **Amélioration du Bruteforce :** Support de plus de services (RDP, SMB).
--   [ ] **Payloads Multi-plateformes :** Génération de payloads pour Linux et macOS.
+-   [ ] **Payloads Multi-plateformes :** Génération de payloads pour Linux et macOS (fonctionnalité prévue).
 -   [ ] **Visualisation des Données :** Graphiques et tableaux de bord plus avancés dans l'interface web.
 -   [ ] **Persistance Avancée :** Ajout de techniques de persistance pour le payload (ex: clés de registre, services).
 -   [ ] **Intégration de Nouveaux Outils :** Ajout de modules pour des outils comme Nmap, SQLMap, etc.

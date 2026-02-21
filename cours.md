@@ -75,6 +75,7 @@ BlackPyReconX peut être contrôlé de trois manières différentes, pour s'adap
 *   Python 3.10 ou supérieur.
 *   L'outil de gestion de paquets `pip`.
 *   (Optionnel mais recommandé) `git` pour cloner le dépôt.
+*   Un environnement virtuel (`venv`) est fortement recommandé.
 *   **Pour utiliser les fonctionnalités de Tor :** Téléchargez, exécutez et connectez-vous à [Tor Browser](https://www.torproject.org/download/). Le navigateur Tor doit être en cours d'exécution pour que le framework puisse utiliser le réseau Tor.
 
 ##### **2.2. Procédure d'Installation**
@@ -83,7 +84,7 @@ BlackPyReconX peut être contrôlé de trois manières différentes, pour s'adap
     git clone <URL_DU_PROJET>
     cd BlackPyReconX
     ```
-2.  **Créer un environnement virtuel (recommandé) :**
+2.  **Créer et activer un environnement virtuel (fortement recommandé) :**
     ```bash
     python -m venv venv
     # Sur Windows
@@ -91,21 +92,11 @@ BlackPyReconX peut être contrôlé de trois manières différentes, pour s'adap
     # Sur macOS/Linux
     source venv/bin/activate
     ```
-3.  **Installer les dépendances :**
-    ```bash
-    pip install -r requirements.txt
-    ```
+    **Note :** L'installation des dépendances sera gérée automatiquement par `start_all.py` lors de son premier lancement.
 
 ##### **2.3. Configuration des Clés API (`.env`)**
 
-Certains modules (OSINT, Telegram) nécessitent des clés API pour fonctionner.
-1.  Copiez le fichier `.env.example` et renommez-le en `.env`.
-2.  Ouvrez le fichier `.env` et remplissez les valeurs :
-    ```dotenv
-    SHODAN_API_KEY="Votre_Clé_Shodan"
-    ABUSEIPDB_API_KEY="Votre_Clé_AbuseIPDB"
-    TELEGRAM_BOT_TOKEN="Votre_Token_de_Bot_Telegram"
-    ```
+Certains modules (OSINT, Telegram) nécessitent des clés API pour fonctionner. Au premier lancement de `start_all.py`, le script vérifiera la présence d'un fichier `.env`. S'il est absent, il le créera. Il vous demandera ensuite de saisir les clés API manquantes (par exemple, `SHODAN_API_KEY`, `ABUSEIPDB_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`) directement dans la console, et les sauvegardera dans `.env`. Vous pouvez également éditer le fichier `.env` manuellement. Un `.env.example` est fourni comme référence.
 
 ##### **2.4. Configuration du Framework (`config.json`)**
 
@@ -157,7 +148,9 @@ Ce chapitre couvre les modules conçus pour attaquer activement une cible ou exp
 
 ---
 
-##### **5.3. Module `exploit_sys.py` : Le Payload Principal (Reverse Shell)**
+##### **5.3. Module `exploit_sys.py` : Le Payload Principal (Génération d'un Reverse Shell)**
+
+Ce module est dédié à la **génération** d'un payload personnalisé.
 
 *   **Objectif :** C'est le module qui génère le "payload" final, un agent malveillant conçu pour être exécuté sur une machine victime afin d'en obtenir le contrôle à distance. (Voir le cours détaillé précédent pour une explication complète).
 *   **Fonctionnalités Intégrées :**
