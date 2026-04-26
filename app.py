@@ -36,7 +36,7 @@ logging.basicConfig(filename='app.log', level=logging.ERROR,
 sys.path.append(os.path.join(os.path.dirname(__file__), 'modules'))
 
 # Importer les modules de BlackPyReconX
-from modules import osint, scanner, exploit_web, reporting, exfiltration, utils, dos, bruteforce, sniffer, crypto_tools
+from modules import osint, scanner, exploit_web, reporting, exfiltration, utils, dos, bruteforce, sniffer, crypto_tools, wireless
 from modules.exploit_web import generate_xss_payload, generate_sqli_payload, generate_lfi_payload
 
 
@@ -97,6 +97,144 @@ def reports():
     # Cette page pourrait être plus complexe, mais pour l'instant, elle n'a besoin que du template.
     # Le chargement des rapports se fait via l'API '/api/reports' appelée par le JS.
     return render_template('reports.html')
+
+@app.route('/wireless')
+def wireless_page():
+    """Affiche la page des outils Wireless."""
+    return render_template('wireless.html')
+
+# --- ROUTES API POUR LE MODULE WIRELESS ---
+
+@app.route('/api/wireless/list_interfaces', methods=['GET'])
+def api_wireless_list_interfaces():
+    try:
+        interfaces = wireless.list_interfaces()
+        return jsonify(interfaces)
+    except Exception as e:
+        app.logger.error(f'Erreur lors de la liste des interfaces sans fil: {e}', exc_info=True)
+        return jsonify({'error': str(e)}), 500
+
+# Global state for wireless operations to manage long-running tasks
+wireless_status = {
+    "monitor_mode": {"active": False, "interface": None, "original_interface": None},
+    "scan": {"running": False, "interface": None, "results": []}
+}
+
+# Thread management for monitor mode to prevent blocking
+monitor_mode_thread = None
+
+def _run_enable_monitor_mode(interface):
+    global wireless_status
+    try:
+        success, new_iface = wireless.enable_monitor_mode(interface)
+        if success:
+            wireless_status["monitor_mode"]["active"] = True
+            wireless_status["monitor_mode"]["interface"] = new_iface if new_iface else interface
+            wireless_status["monitor_mode"]["original_interface"] = interface
+        else:
+            wireless_status["monitor_mode"]["active"] = False
+            wireless_status["monitor_mode"]["interface"] = None
+            wireless_status["monitor_mode"]["original_interface"] = None
+            app.logger.error(f"Failed to enable monitor mode on {interface}.")
+    except Exception as e:
+        app.logger.error(f"Error enabling monitor mode on {interface}: {e}", exc_info=True)
+        wireless_status["monitor_mode"]["active"] = False
+        wireless_status["monitor_mode"]["interface"] = None
+        wireless_status["monitor_mode"]["original_interface"] = None
+
+@app.route('/api/wireless/monitor_start', methods=['POST'])
+def api_wireless_monitor_start():
+    global monitor_mode_thread
+    data = request.get_json()
+    iface = data.get('iface')
+    if not iface:
+        return jsonify({'error': 'Nom d\'interface manquant.'}), 400
+
+    if wireless_status["monitor_mode"]["active"]:
+        return jsonify({'message': f"Le mode moniteur est déjà actif sur {wireless_status['monitor_mode']['interface']}."}), 200
+
+    if monitor_mode_thread and monitor_mode_thread.is_alive():
+        return jsonify({'error': "Une opération de mode moniteur est déjà en cours."}), 409 # Conflict
+
+    monitor_mode_thread = threading.Thread(target=_run_enable_monitor_mode, args=(iface,), daemon=True)
+    monitor_mode_thread.start()
+    
+    return jsonify({'message': f"Tentative d'activation du mode moniteur sur {iface}. Vérifiez le statut."}), 202 # Accepted
+
+def _run_disable_monitor_mode(interface):
+    global wireless_status
+    try:
+        success = wireless.disable_monitor_mode(interface)
+        if success:
+            wireless_status["monitor_mode"]["active"] = False
+            wireless_status["monitor_mode"]["interface"] = None
+            wireless_status["monitor_mode"]["original_interface"] = None
+        else:
+            app.logger.error(f"Failed to disable monitor mode on {interface}.")
+    except Exception as e:
+        app.logger.error(f"Error disabling monitor mode on {interface}: {e}", exc_info=True)
+
+@app.route('/api/wireless/monitor_stop', methods=['POST'])
+def api_wireless_monitor_stop():
+    global monitor_mode_thread
+    if not wireless_status["monitor_mode"]["active"]:
+        return jsonify({'message': "Le mode moniteur n'est pas actif."}), 200
+
+    iface_to_stop = wireless_status["monitor_mode"]["interface"]
+    if not iface_to_stop:
+        return jsonify({'error': "Aucune interface en mode moniteur active n'est enregistrée."}), 400
+
+    monitor_mode_thread = threading.Thread(target=_run_disable_monitor_mode, args=(iface_to_stop,), daemon=True)
+    monitor_mode_thread.start()
+
+    return jsonify({'message': f"Tentative de désactivation du mode moniteur sur {iface_to_stop}. Vérifiez le statut."}), 202
+
+@app.route('/api/wireless/monitor_status', methods=['GET'])
+def api_wireless_monitor_status():
+    return jsonify(wireless_status["monitor_mode"])
+
+
+# Thread management for scan to prevent blocking
+scan_thread = None
+
+def _run_scan_networks(interface, duration):
+    global wireless_status
+    try:
+        wireless_status["scan"]["running"] = True
+        wireless_status["scan"]["interface"] = interface
+        networks = wireless.scan_networks(interface, duration)
+        wireless_status["scan"]["results"] = networks
+    except Exception as e:
+        app.logger.error(f"Error scanning networks on {interface}: {e}", exc_info=True)
+        wireless_status["scan"]["results"] = []
+    finally:
+        wireless_status["scan"]["running"] = False
+
+@app.route('/api/wireless/scan_networks', methods=['POST'])
+def api_wireless_scan_networks():
+    global scan_thread
+    data = request.get_json()
+    iface = data.get('iface')
+    duration = data.get('duration', 10)
+
+    if not iface:
+        return jsonify({'error': 'Nom d\'interface manquant.'}), 400
+
+    if not wireless_status["monitor_mode"]["active"] or wireless_status["monitor_mode"]["interface"] != iface:
+        return jsonify({'error': 'L\'interface spécifiée n\'est pas en mode moniteur, ou le mode moniteur n\'est pas actif sur cette interface.'}), 400
+
+    if scan_thread and scan_thread.is_alive():
+        return jsonify({'error': "Un scan est déjà en cours."}), 409 # Conflict
+
+    wireless_status["scan"]["results"] = [] # Clear previous results
+    scan_thread = threading.Thread(target=_run_scan_networks, args=(iface, duration,), daemon=True)
+    scan_thread.start()
+
+    return jsonify({'message': f"Lancement du scan sur {iface} pour {duration} secondes. Vérifiez le statut pour les résultats."}), 202
+
+@app.route('/api/wireless/scan_status', methods=['GET'])
+def api_wireless_scan_status():
+    return jsonify(wireless_status["scan"])
 
 # --- ROUTES API (Anciennes routes qui deviennent des points d'API) ---
 

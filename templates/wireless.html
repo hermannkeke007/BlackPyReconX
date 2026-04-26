@@ -1,0 +1,273 @@
+{% extends "layout.html" %}
+
+{% block title %}Wireless Tools{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <h2 class="mb-4">Wireless Tools</h2>
+
+    <!-- Interface Listing -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Wireless Interfaces</h5>
+        </div>
+        <div class="card-body">
+            <button class="btn btn-primary mb-3" id="refreshInterfacesBtn">Refresh Interfaces</button>
+            <div class="table-responsive">
+                <table class="table table-striped table-bordered" id="interfacesTable">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>MAC Address</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Interfaces will be loaded here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+            <div id="monitorModeStatus" class="mt-3">
+                <p>Monitor Mode: <span class="badge bg-secondary" id="monitorModeBadge">Inactive</span> on <span id="monitorModeIface">N/A</span> (Original: <span id="monitorModeOriginalIface">N/A</span>)</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Network Scan -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Network Scan</h5>
+        </div>
+        <div class="card-body">
+            <div class="mb-3">
+                <label for="scanInterfaceSelect" class="form-label">Select Interface (Monitor Mode):</label>
+                <select class="form-select" id="scanInterfaceSelect">
+                    <!-- Options will be loaded by JavaScript -->
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="scanDuration" class="form-label">Scan Duration (seconds):</label>
+                <input type="number" class="form-control" id="scanDuration" value="10" min="5" max="60">
+            </div>
+            <button class="btn btn-info mb-3" id="startScanBtn">Start Scan</button>
+            <div id="scanStatus" class="mt-3">
+                <p>Scan Status: <span class="badge bg-secondary" id="scanBadge">Idle</span></p>
+            </div>
+            <div class="table-responsive mt-3">
+                <table class="table table-striped table-bordered" id="scanResultsTable">
+                    <thead>
+                        <tr>
+                            <th>ESSID</th>
+                            <th>BSSID</th>
+                            <th>Channel</th>
+                            <th>Privacy</th>
+                            <th>Cipher</th>
+                            <th>Auth</th>
+                            <th>Power</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Scan results will be loaded here by JavaScript -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // --- Global State Variables ---
+    let currentMonitorInterface = null; // To keep track of the interface currently in monitor mode
+
+    // --- Helper Functions ---
+    function showNotification(message, type = 'success') {
+        // Implement a more sophisticated notification system if available (e.g., Bootstrap Toasts)
+        alert(message); 
+    }
+
+    function updateMonitorModeUI() {
+        $.getJSON('/api/wireless/monitor_status', function(data) {
+            if (data.active) {
+                $('#monitorModeBadge').removeClass('bg-secondary bg-danger').addClass('bg-success').text('Active');
+                $('#monitorModeIface').text(data.interface);
+                $('#monitorModeOriginalIface').text(data.original_interface);
+                currentMonitorInterface = data.interface;
+                $('.monitor-mode-btn').prop('disabled', false); // Enable/disable based on specific btn
+            } else {
+                $('#monitorModeBadge').removeClass('bg-success bg-danger').addClass('bg-secondary').text('Inactive');
+                $('#monitorModeIface').text('N/A');
+                $('#monitorModeOriginalIface').text('N/A');
+                currentMonitorInterface = null;
+                $('.monitor-mode-btn').prop('disabled', false); // Enable/disable based on specific btn
+            }
+            updateInterfaceTable(currentMonitorInterface); // Update interface table with monitor mode state
+            updateScanInterfaceSelect(currentMonitorInterface); // Update scan interface select
+        }).fail(function(jqXHR) {
+            showNotification('Error fetching monitor mode status: ' + jqXHR.responseJSON.error, 'danger');
+        });
+    }
+
+    function updateScanStatusUI() {
+        $.getJSON('/api/wireless/scan_status', function(data) {
+            if (data.running) {
+                $('#scanBadge').removeClass('bg-secondary bg-success').addClass('bg-info').text('Running');
+                $('#startScanBtn').prop('disabled', true);
+            } else {
+                $('#scanBadge').removeClass('bg-info bg-danger').addClass('bg-secondary').text('Idle');
+                $('#startScanBtn').prop('disabled', false);
+                displayScanResults(data.results);
+            }
+        }).fail(function(jqXHR) {
+            showNotification('Error fetching scan status: ' + jqXHR.responseJSON.error, 'danger');
+        });
+    }
+
+    function displayScanResults(networks) {
+        const tableBody = $('#scanResultsTable tbody');
+        tableBody.empty();
+        if (networks.length === 0) {
+            tableBody.append('<tr><td colspan="7">No networks found.</td></tr>');
+            return;
+        }
+        networks.forEach(function(net) {
+            tableBody.append(`
+                <tr>
+                    <td>${net.essid || 'N/A'}</td>
+                    <td>${net.bssid || 'N/A'}</td>
+                    <td>${net.channel || 'N/A'}</td>
+                    <td>${net.privacy || 'N/A'}</td>
+                    <td>${net.cipher || 'N/A'}</td>
+                    <td>${net.auth || 'N/A'}</td>
+                    <td>${net.power || 'N/A'}</td>
+                </tr>
+            `);
+        });
+    }
+
+    function updateInterfaceTable(monitorIface = null) {
+        $.getJSON('/api/wireless/list_interfaces', function(interfaces) {
+            const tableBody = $('#interfacesTable tbody');
+            tableBody.empty();
+            if (interfaces.length === 0) {
+                tableBody.append('<tr><td colspan="4">No wireless interfaces detected or an error occurred.</td></tr>');
+                return;
+            }
+            interfaces.forEach(function(iface) {
+                const isMonitor = (iface.name === monitorIface);
+                const actionBtn = isMonitor 
+                    ? `<button class="btn btn-warning btn-sm monitor-mode-btn" data-iface="${iface.name}" data-action="stop" ${isMonitor ? '' : 'disabled'}>Stop Monitor</button>`
+                    : `<button class="btn btn-success btn-sm monitor-mode-btn" data-iface="${iface.name}" data-action="start" ${isMonitor ? 'disabled' : ''}>Start Monitor</button>`;
+                
+                tableBody.append(`
+                    <tr>
+                        <td>${iface.name}</td>
+                        <td>${iface.type}</td>
+                        <td>${iface.mac}</td>
+                        <td>${actionBtn}</td>
+                    </tr>
+                `);
+            });
+        }).fail(function(jqXHR) {
+            showNotification('Error fetching interfaces: ' + jqXHR.responseJSON.error, 'danger');
+        });
+    }
+
+    function updateScanInterfaceSelect(monitorIface = null) {
+        const select = $('#scanInterfaceSelect');
+        select.empty();
+        if (monitorIface) {
+            select.append(`<option value="${monitorIface}">${monitorIface} (Monitor Mode)</option>`);
+        } else {
+            select.append('<option value="">No monitor mode interface active</option>');
+            select.prop('disabled', true);
+        }
+    }
+
+    // --- Event Handlers ---
+    $('#refreshInterfacesBtn').on('click', function() {
+        updateMonitorModeUI(); // This will also refresh the interface table
+    });
+
+    $('#interfacesTable').on('click', '.monitor-mode-btn', function() {
+        const btn = $(this);
+        const iface = btn.data('iface');
+        const action = btn.data('action');
+        
+        btn.prop('disabled', true); // Disable button to prevent multiple clicks
+        
+        const url = action === 'start' ? '/api/wireless/monitor_start' : '/api/wireless/monitor_stop';
+        const msg = action === 'start' ? `Starting monitor mode on ${iface}...` : `Stopping monitor mode on ${iface}...`;
+
+        showNotification(msg, 'info');
+
+        $.ajax({
+            url: url,
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ iface: iface }),
+            success: function(response) {
+                showNotification(response.message);
+                // Give some time for the operation to complete on the backend
+                setTimeout(updateMonitorModeUI, 3000); 
+            },
+            error: function(jqXHR) {
+                showNotification('Error: ' + jqXHR.responseJSON.error, 'danger');
+                btn.prop('disabled', false); // Re-enable button on error
+                setTimeout(updateMonitorModeUI, 1000); // Re-check status
+            }
+        });
+    });
+
+    $('#startScanBtn').on('click', function() {
+        const iface = $('#scanInterfaceSelect').val();
+        const duration = $('#scanDuration').val();
+
+        if (!iface) {
+            showNotification('Please select an interface in monitor mode.', 'danger');
+            return;
+        }
+        if (duration < 5) {
+            showNotification('Scan duration must be at least 5 seconds.', 'danger');
+            return;
+        }
+
+        $('#startScanBtn').prop('disabled', true);
+        showNotification(`Starting scan on ${iface} for ${duration} seconds...`, 'info');
+        
+        $.ajax({
+            url: '/api/wireless/scan_networks',
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ iface: iface, duration: parseInt(duration) }),
+            success: function(response) {
+                showNotification(response.message);
+                // Poll for scan status
+                const scanInterval = setInterval(function() {
+                    $.getJSON('/api/wireless/scan_status', function(data) {
+                        if (!data.running) {
+                            clearInterval(scanInterval);
+                            updateScanStatusUI(); // This will display results
+                            $('#startScanBtn').prop('disabled', false);
+                        }
+                    });
+                }, 2000); // Check every 2 seconds
+            },
+            error: function(jqXHR) {
+                showNotification('Error: ' + jqXHR.responseJSON.error, 'danger');
+                $('#startScanBtn').prop('disabled', false);
+            }
+        });
+    });
+
+    // --- Initial Load ---
+    updateMonitorModeUI();
+    updateScanStatusUI();
+    // Poll monitor mode status periodically
+    setInterval(updateMonitorModeUI, 5000); // Every 5 seconds
+    setInterval(updateScanStatusUI, 5000); // Every 5 seconds
+
+});
+</script>
+{% endblock %}

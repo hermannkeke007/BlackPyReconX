@@ -15,7 +15,7 @@ import os
 import time
 from rich.console import Console
 from rich.panel import Panel
-from modules import osint, scanner, exploit_web, exploit_sys, exfiltration, reporting, utils, dos, bruteforce, sniffer, crypto_tools
+from modules import osint, scanner, exploit_web, exploit_sys, exfiltration, reporting, utils, dos, bruteforce, sniffer, crypto_tools, wireless
 
 console = Console()
 
@@ -208,6 +208,43 @@ def main():
     stegano_reveal_parser.add_argument("--image", help="Chemin de l'image stéganographiée contenant le fichier caché", required=True)
     stegano_reveal_parser.add_argument("--output", help="Chemin du fichier de sortie où le fichier révélé sera sauvegardé", required=True)
     
+    # Subparser pour Wireless
+    wireless_parser = subparsers.add_parser(
+        "wireless",
+        help="""
+        Lance le module d'outils Wi-Fi pour la gestion des interfaces, le scan, la capture et les attaques.
+        """
+    )
+    wireless_subparsers = wireless_parser.add_subparsers(dest="wireless_action", help="Actions disponibles pour le module Wi-Fi")
+
+    # Wireless: list interfaces
+    wireless_list_parser = wireless_subparsers.add_parser(
+        "list",
+        help="Liste les interfaces Wi-Fi disponibles sur le système."
+    )
+
+    # Wireless: monitor mode start
+    wireless_monitor_start_parser = wireless_subparsers.add_parser(
+        "monitor_start",
+        help="Active le mode moniteur sur une interface Wi-Fi spécifiée."
+    )
+    wireless_monitor_start_parser.add_argument("--iface", help="Interface Wi-Fi à passer en mode moniteur (ex: wlan0)", required=True)
+
+    # Wireless: monitor mode stop
+    wireless_monitor_stop_parser = wireless_subparsers.add_parser(
+        "monitor_stop",
+        help="Désactive le mode moniteur sur une interface Wi-Fi spécifiée."
+    )
+    wireless_monitor_stop_parser.add_argument("--iface", help="Interface Wi-Fi à désactiver du mode moniteur (ex: wlan0mon)", required=True)
+
+    # Wireless: scan networks
+    wireless_scan_parser = wireless_subparsers.add_parser(
+        "scan",
+        help="Scan les réseaux Wi-Fi disponibles sur une interface en mode moniteur."
+    )
+    wireless_scan_parser.add_argument("--iface", help="Interface Wi-Fi en mode moniteur (ex: wlan0mon)", required=True)
+    wireless_scan_parser.add_argument("--duration", type=int, default=10, help="Durée du scan en secondes (défaut: 10)")
+    
     # Options générales (comme --tor, si elles s'appliquent à plusieurs modules)
     parser.add_argument("--tor", action="store_true", help="Forcer l'utilisation de TOR pour cette session. Applique un proxy SOCKS5 à toutes les requêtes HTTP/HTTPS effectuées par les modules compatibles.")
 
@@ -379,6 +416,47 @@ def main():
         utils.log_message('+', f"Rapport TXT généré : {txt_file}")
         utils.log_message('+', f"Rapport PDF généré : {pdf_file}")
         utils.log_message('+', f"Rapport HTML généré : {html_file}")
+
+    elif args.module == "wireless":
+        if not hasattr(args, 'wireless_action') or args.wireless_action is None:
+            wireless_parser.print_help(sys.stderr)
+            sys.exit(1)
+
+        if args.wireless_action == "list":
+            utils.log_message('*', "Listing wireless interfaces...")
+            interfaces = wireless.list_interfaces()
+            if interfaces:
+                utils.log_message('+', "Available Wireless Interfaces:")
+                for iface in interfaces:
+                    utils.log_message('+', f"  - Name: {iface['name']}, Type: {iface['type']}, MAC: {iface['mac']}")
+            else:
+                utils.log_message('!', "No wireless interfaces found or an error occurred.")
+
+        elif args.wireless_action == "monitor_start":
+            utils.log_message('*', f"Attempting to enable monitor mode on {args.iface}...")
+            success, new_iface = wireless.enable_monitor_mode(args.iface)
+            if success:
+                utils.log_message('+', f"Monitor mode enabled successfully. New interface: {new_iface if new_iface else args.iface}")
+            else:
+                utils.log_message('!', f"Failed to enable monitor mode on {args.iface}. Check permissions and if aircrack-ng is installed.")
+        
+        elif args.wireless_action == "monitor_stop":
+            utils.log_message('*', f"Attempting to disable monitor mode on {args.iface}...")
+            success = wireless.disable_monitor_mode(args.iface)
+            if success:
+                utils.log_message('+', f"Monitor mode disabled successfully on {args.iface}.")
+            else:
+                utils.log_message('!', f"Failed to disable monitor mode on {args.iface}. Check permissions.")
+        
+        elif args.wireless_action == "scan":
+            utils.log_message('*', f"Starting network scan on {args.iface} for {args.duration} seconds...")
+            networks = wireless.scan_networks(args.iface, args.duration)
+            if networks:
+                utils.log_message('+', "Discovered Networks:")
+                for net in networks:
+                    utils.log_message('+', f"  ESSID: {net.get('essid', 'N/A')}, BSSID: {net.get('bssid', 'N/A')}, Channel: {net.get('channel', 'N/A')}, Privacy: {net.get('privacy', 'N/A')}, Power: {net.get('power', 'N/A')}")
+            else:
+                utils.log_message('!', "No networks found or an error occurred during scan.")
         
     utils.log_message('+', "Opérations terminées.")
 
