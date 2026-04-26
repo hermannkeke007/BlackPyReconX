@@ -21,13 +21,42 @@ import json
 import os
 
 # --- Détermination de l'exécutable Python ---
-# Ce bloc doit être exécuté avant toute tentative d'installation de dépendances.
 VENV_PATH = os.path.join(os.path.dirname(__file__), 'venv')
-PYTHON_EXECUTABLE = os.path.join(VENV_PATH, 'Scripts', 'python.exe') if sys.platform == 'win32' else os.path.join(VENV_PATH, 'bin', 'python')
+VENV_PYTHON_WIN = os.path.join(VENV_PATH, 'Scripts', 'python.exe')
+VENV_PYTHON_UNIX = os.path.join(VENV_PATH, 'bin', 'python')
 
-# Fallback si l'environnement virtuel n'est pas trouvé, utiliser l'interpréteur courant
-if not os.path.exists(PYTHON_EXECUTABLE):
-    PYTHON_EXECUTABLE = sys.executable
+# Default to system python, will be updated if venv exists/is created
+PYTHON_EXECUTABLE = sys.executable
+
+# Ensure venv exists and use its python
+if not (os.path.exists(VENV_PYTHON_WIN) or os.path.exists(VENV_PYTHON_UNIX)):
+    print("[*] Création de l'environnement virtuel...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "venv", VENV_PATH])
+        print("[+] Environnement virtuel créé avec succès.")
+        # Update PYTHON_EXECUTABLE to point to the newly created venv's python
+        if sys.platform == 'win32':
+            PYTHON_EXECUTABLE = VENV_PYTHON_WIN
+        else:
+            PYTHON_EXECUTABLE = VENV_PYTHON_UNIX
+    except Exception as e:
+        print(f"[-] Erreur lors de la création de l'environnement virtuel: {e}")
+        print("[-] Le programme ne peut pas continuer. Assurez-vous que 'python -m venv' est disponible.")
+        sys.exit(1)
+else:
+    # Venv already exists, set PYTHON_EXECUTABLE to it
+    if sys.platform == 'win32':
+        PYTHON_EXECUTABLE = VENV_PYTHON_WIN
+    else:
+        PYTHON_EXECUTABLE = VENV_PYTHON_UNIX
+
+# If we are not running inside the venv, re-execute ourselves within the venv
+if sys.executable != PYTHON_EXECUTABLE:
+    print(f"[*] Redémarrage du script dans l'environnement virtuel: {PYTHON_EXECUTABLE} {sys.argv[0]}...")
+    # Using 'call' here to wait for the new process to finish, then exit.
+    # The new process will then handle the rest of the script.
+    subprocess.Popen([PYTHON_EXECUTABLE, sys.argv[0]] + sys.argv[1:])
+    sys.exit(0) # Exit the current process as the venv process has taken over
 
 # --- Vérification et installation des dépendances ---
 # Ce bloc est placé au début pour s'assurer que les modules sont disponibles avant leur importation.
