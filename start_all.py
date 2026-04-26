@@ -55,8 +55,8 @@ if sys.executable != PYTHON_EXECUTABLE:
     print(f"[*] Redémarrage du script dans l'environnement virtuel: {PYTHON_EXECUTABLE} {sys.argv[0]}...")
     # Using 'call' here to wait for the new process to finish, then exit.
     # The new process will then handle the rest of the script.
-    subprocess.Popen([PYTHON_EXECUTABLE, sys.argv[0]] + sys.argv[1:])
-    sys.exit(0) # Exit the current process as the venv process has taken over
+    result = subprocess.run([PYTHON_EXECUTABLE, sys.argv[0]] + sys.argv[1:])
+    sys.exit(result.returncode) # Exit the current process with the return code of the venv process
 
 # --- Vérification et installation des dépendances ---
 # Ce bloc est placé au début pour s'assurer que les modules sont disponibles avant leur importation.
